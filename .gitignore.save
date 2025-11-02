@@ -1,0 +1,14 @@
+# Privát, biztonsági és környezeti adatok
+.env
+google_token.json
+
+# Node.js függőségek
+node_modules/
+package-lock.json
+
+# Lokális / fejlesztői fájlok
+start.bat
+tasks.json
+ini/
+
+

@@ -1,0 +1,16 @@
+{
+  "name": "file-taskmanager",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.1",
+    "express": "^4.21.2",
+    "googleapis": "^157.0.0"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  }
+}

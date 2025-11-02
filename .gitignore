@@ -1,0 +1,19 @@
+# Környezeti és titkos adatok
+.env
+google_token.json
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Fejlesztői fájlok
+start.bat
+tasks.json
+ini/
+
+# IDE / OS
+.vscode/
+.DS_Store
+Thumbs.db
