@@ -1,6 +1,5 @@
 # Környezeti és titkos adatok
-.env
-google_token.json
+
 
 # Node.js
 node_modules/
