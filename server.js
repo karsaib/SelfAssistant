@@ -1,233 +1,515 @@
-// server.js — fájl alapú Task Manager backend + Google Calendar szinkron
-// Kanban státuszok: coming / progress / overdue / done
-// ÚJ: betöltéskor a COMING → PROGRESS, ha a feladat időintervalluma érinti a mai napot.
+// ============================================================================
+// Task Manager Backend
+// Implements:
+// - Task storage (JSON file)
+// - Time tracking with: trackedMs, trackStart, timeLog
+// - Status transitions: coming, active, tracking, overdue, done
+// - Google Calendar sync (optional)
+// ============================================================================
 
 import express from "express";
-// Alias FS (Promise API)
 import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { google } from "googleapis";
 
-/* ──────────────────────────────────────────────────────────────
-   1) Alap beállítások, útvonalak, .env betöltés
-   ────────────────────────────────────────────────────────────── */
-
+// Resolve paths depending on whether running from source or from pkg binary
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 const IS_PKG   = typeof process.pkg !== "undefined";
+
+// Project root directory (where server.js is located)
 const ROOT_DIR = IS_PKG ? path.dirname(process.execPath) : __dirname;
 
+// Load environment variables
 dotenv.config({ path: path.join(ROOT_DIR, ".env") });
 
-const DATA_DIR   = process.env.DATA_DIR || ROOT_DIR;
-const DATA_FILE  = path.join(DATA_DIR, "tasks.json");
-const TOKEN_PATH = path.join(DATA_DIR, "google_token.json");
+// Data folder and JSON file paths
+const DATA_DIR   = path.join(ROOT_DIR, "data");
+const TASKS_FILE = path.join(DATA_DIR, "tasks.json");
+const TOKEN_FILE = path.join(DATA_DIR, "token.json");
 
-/* ──────────────────────────────────────────────────────────────
-   2) Express app és statikus kiszolgálás
-   ────────────────────────────────────────────────────────────── */
+// ============================================================================
+// HELPERS: File operations
+// ============================================================================
 
-const app = express();
-
-// A bejövő JSON törzs kérésenként memóriában pufferelődik és parse-olódik → req.body
-app.use(express.json());
-
-// Frontend kiszolgálása
-app.use(express.static(path.join(ROOT_DIR, "public")));
-
-/* ──────────────────────────────────────────────────────────────
-   3) Általános beállítások (időzóna, naptár, scope-ok)
-   ────────────────────────────────────────────────────────────── */
-
-const TIME_ZONE   = "Europe/Budapest";
-const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || "primary";
-const SCOPES      = ["https://www.googleapis.com/auth/calendar.events"];
-
-/* ──────────────────────────────────────────────────────────────
-   4) Fájlos adattár
-   ────────────────────────────────────────────────────────────── */
-
-async function loadTasks() {
-  try { return JSON.parse(await fs.readFile(DATA_FILE, "utf-8")); }
-  catch (e) { if (e.code === "ENOENT") return []; throw e; }
-}
-async function saveTasks(tasks) {
-  const tmp = DATA_FILE + ".tmp";
-  await fs.writeFile(tmp, JSON.stringify(tasks, null, 2), "utf-8");
-  await fs.rename(tmp, DATA_FILE);
-}
-function genId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+// Ensure /data directory exists
+async function ensureDataDir(){
+  await fs.mkdir(DATA_DIR, { recursive: true });
 }
 
-/* ──────────────────────────────────────────────────────────────
-   5) Google OAuth + Calendar
-   ────────────────────────────────────────────────────────────── */
+// Load tasks from JSON file, applying default values when needed
+async function loadTasks(){
+  await ensureDataDir();
+  try{
+    const raw = await fs.readFile(TASKS_FILE, "utf8");
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
 
-function getOAuthClient() {
-  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } = process.env;
-  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI);
-}
-async function readSavedToken() { try { return JSON.parse(await fs.readFile(TOKEN_PATH, "utf-8")); } catch { return null; } }
-async function saveToken(tokens) { await fs.writeFile(TOKEN_PATH, JSON.stringify(tokens, null, 2), "utf-8"); }
-async function getGoogleAuth() { const c = getOAuthClient(); const t = await readSavedToken(); if (!t) return null; c.setCredentials(t); return c; }
-async function getCalendar() { const a = await getGoogleAuth(); if (!a) return null; return google.calendar({ version: "v3", auth: a }); }
+    // Ensure tracking-related fields exist for older tasks
+    const changed = normalizeDefaults(arr);
+    if (changed) await saveTasks(arr);
 
-app.get("/auth/google", (req, res) => {
-  const o = getOAuthClient();
-  res.redirect(o.generateAuthUrl({ access_type: "offline", prompt: "consent", scope: SCOPES }));
-});
-app.get("/oauth2callback", async (req, res) => {
-  if (req.query.error) return res.status(400).send("OAuth error: " + req.query.error);
-  try { const o = getOAuthClient(); const { tokens } = await o.getToken(req.query.code); await saveToken(tokens);
-    res.send("Google Calendar összekapcsolva! Visszatérhetsz az alkalmazáshoz.");
-  } catch (e) { console.error("OAuth hiba:", e?.message); res.status(500).send("OAuth hiba."); }
-});
+    // Ensure defaults for each task when returning
+    return arr.map(ensureTrackFields);
 
-/* ──────────────────────────────────────────────────────────────
-   6) Idő / Calendar helper
-   ────────────────────────────────────────────────────────────── */
-
-const addOneDay = d => { const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() + 1); return x.toISOString().slice(0, 10); };
-const combineDT = (d, t) => `${d}T${(t || "00:00")}:00`;
-const isFilled  = (...v) => v.every(x => x !== undefined && x !== null && String(x).trim() !== "");
-
-// Az adott időzónában (Europe/Budapest) „YYYY-MM-DD” formátumú mai nap
-function todayYMD(tz = TIME_ZONE) {
-  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
-  return fmt.format(new Date()); // en-CA → YYYY-MM-DD
+  }catch(e){
+    // If file does not exist, return empty list
+    if (e.code === "ENOENT") return [];
+    console.error("loadTasks error:", e?.message);
+    return [];
+  }
 }
 
-// Megnézzük, hogy egy taszk időintervalluma érinti-e a MAI napot (nap-alapú logika)
-function isActiveTodayByDates(t) {
-  if (t.done) return false;
-  const today = todayYMD();
-  const start = t.startDate || t.due || null;
-  const end   = t.endDate || start || null;
-  if (!start) return false;
+// Save tasks to JSON file
+async function saveTasks(tasks){
+  await ensureDataDir();
+  await fs.writeFile(TASKS_FILE, JSON.stringify(tasks, null, 2), "utf8");
+}
 
-  // All-day / csak dátum
-  if (t.allDay || (!t.startTime && !t.endTime)) {
-    // aktív, ha today ∈ [start, end]
-    return today >= start && today <= end;
+// ============================================================================
+// HELPERS: Task field normalization
+// ============================================================================
+
+// Ensure tracking fields exist on a task
+function ensureTrackFields(t) {
+  if (t.trackedMs === undefined) t.trackedMs = 0;      // accumulated milliseconds
+  if (t.trackStart === undefined) t.trackStart = null; // when tracking started
+  if (t.timeLog === undefined) t.timeLog = "";         // log entries: "YYYY-MM-DD HH:MM:SS, ..."
+  if (t.timeLog === undefined) t.timeLog = "";
+  if (t.color === undefined || t.color === null || t.color === "") {
+    t.color = "yellow";         
+  }
+  return t;
+}
+
+
+// Normalize missing tracking fields in loaded tasks
+function normalizeDefaults(list){
+  let changed = false;
+  for (const t of list){
+    if (t.trackedMs === undefined){ t.trackedMs = 0; changed = true; }
+    if (t.trackStart === undefined){ t.trackStart = null; changed = true; }
+    if (t.timeLog === undefined){ t.timeLog = ""; changed = true; }
+	   if (t.color === undefined){ t.color = "yellow"; changed = true; } 
+  }
+  return changed;
+}
+
+// ============================================================================
+// HELPERS: Time formatting and parsing
+// ============================================================================
+
+// Convert milliseconds → "HH:MM:SS"
+function formatDurationHMS(ms) {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const h = String(Math.floor(totalSec / 3600)).padStart(2, "0");
+  const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, "0");
+  const s = String(totalSec % 60).padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+
+// Current date in YYYY-MM-DD
+function currentLocalDateYMD() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// Parse timeLog entries ("YYYY-MM-DD HH:MM:SS, ...") → total ms
+function parseTimeLogMs(str){
+  if (!str) return 0;
+  let total = 0;
+
+  const entries = String(str).split(",");
+
+  for (const raw of entries){
+    const part = raw.trim();
+    if (!part) continue;
+
+    // Extract substring after first space → HH:MM:SS
+    const idx = part.indexOf(" ");
+    if (idx === -1) continue;
+
+    const timePart = part.slice(idx + 1).trim();
+    const seg = timePart.split(":").map(x => Number(x));
+
+    if (!Number.isFinite(seg[0])) continue;
+
+    const h = seg[0];
+    const m = Number.isFinite(seg[1]) ? seg[1] : 0;
+    const s = Number.isFinite(seg[2]) ? seg[2] : 0;
+
+    const ms = ((h * 3600) + (m * 60) + s) * 1000;
+    if (ms > 0) total += ms;
   }
 
-  // Időzített esemény: nap szinten vizsgálunk (egyszerűsítve)
-  const lastDay = t.endDate || t.startDate;
-  return today >= t.startDate && today <= lastDay;
+  return total;
 }
 
+// ============================================================================
+// GOOGLE CALENDAR (optional integration)
+// ============================================================================
+
+// Load environment variables for Calendar integration
+const {
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GOOGLE_REDIRECT_URI,
+  GOOGLE_CALENDAR_ID
+} = process.env;
+
+// Create OAuth2 client
+function getOAuthClient(){
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI){
+    return null;
+  }
+  return new google.auth.OAuth2(
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI
+  );
+}
+
+// Load auth tokens from file
+async function loadTokens(){
+  try{
+    const raw = await fs.readFile(TOKEN_FILE, "utf8");
+    return JSON.parse(raw);
+  }catch(e){
+    return null;
+  }
+}
+
+// Save auth tokens to file
+async function saveTokens(tokens){
+  await ensureDataDir();
+  await fs.writeFile(TOKEN_FILE, JSON.stringify(tokens, null, 2), "utf8");
+}
+
+// Create a Google Calendar API client
+async function getCalendarClient(){
+  const oauth2Client = getOAuthClient();
+  if (!oauth2Client) return null;
+
+  const tokens = await loadTokens();
+  if (!tokens) return null;
+
+  oauth2Client.setCredentials(tokens);
+  return google.calendar({ version:"v3", auth: oauth2Client });
+}
+
+// Insert or update an event safely
+async function safeEnsureCalendarEvent(task){
+  try{
+    const calendar = await getCalendarClient();
+    if (!calendar || !GOOGLE_CALENDAR_ID) return task;
+
+    const base = {
+      summary: task.title,
+      description: task.notes || "",
+    };
+
+    let eventBody;
+
+    // All-day event
+    if (task.allDay && task.startDate){
+      const start = task.startDate;
+      const end   = addOneDay(task.startDate);
+      eventBody = {
+        ...base,
+        start: { date: start },
+        end:   { date: end },
+      };
+    }
+    // Timed event
+    else if (task.startDate && task.startTime && task.endDate && task.endTime){
+      const start = combineDT(task.startDate, task.startTime);
+      const end   = combineDT(task.endDate,   task.endTime);
+      eventBody = {
+        ...base,
+        start: { dateTime: start },
+        end:   { dateTime: end },
+      };
+    }
+    // Missing info → fallback 30-min event
+    else {
+      eventBody = fallback(task);
+    }
+
+    // Add tag to event extendedProperties
+    eventBody = attachTag(eventBody, task);
+
+    // Insert or update event
+    if (!task.googleEventId){
+      const resp = await calendar.events.insert({
+        calendarId: GOOGLE_CALENDAR_ID,
+        requestBody: eventBody,
+      });
+      const event = resp.data;
+      if (event && event.id) task.googleEventId = event.id;
+    }
+    else {
+      await calendar.events.update({
+        calendarId: GOOGLE_CALENDAR_ID,
+        eventId: task.googleEventId,
+        requestBody: eventBody,
+      });
+    }
+
+    return task;
+
+  }catch(e){
+    console.error("safeEnsureCalendarEvent error:", e?.message);
+    return task;
+  }
+}
+
+// Delete Calendar event safely
+async function safeDeleteCalendarEvent(task){
+  try{
+    const calendar = await getCalendarClient();
+    if (!calendar || !GOOGLE_CALENDAR_ID) return;
+    if (!task.googleEventId) return;
+
+    await calendar.events.delete({
+      calendarId: GOOGLE_CALENDAR_ID,
+      eventId: task.googleEventId,
+    });
+
+  }catch(e){
+    console.error("safeDeleteCalendarEvent error:", e?.message);
+  }
+}
+
+// Small helpers for handling Google Calendar dates
+const addOneDay = d => { const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() + 1); return x.toISOString().slice(0, 10); };
+const combineDT = (d, t) => `${d}T${(t || "00:00")}:00`;
 const attachTag = (ev, t) => t.tag
   ? ({ ...ev, extendedProperties: { ...(ev.extendedProperties || {}), private: { ...(ev.extendedProperties?.private || {}), tag: String(t.tag) }}})
   : ev;
 
-function buildEventFromTask(t) {
-  if (t.allDay || (t.startDate && !t.startTime && !t.endTime)) {
-    const s = t.startDate || t.due; if (!s) return fallback(t);
-    const e = t.endDate ? addOneDay(t.endDate) : addOneDay(s);
-    return attachTag({ summary: t.title, description: t.notes || "", start: { date: s, timeZone: TIME_ZONE }, end: { date: e, timeZone: TIME_ZONE }, transparency: t.done ? "transparent" : "opaque" }, t);
-  }
-  if (isFilled(t.startDate, t.startTime)) {
-    const s = combineDT(t.startDate, t.startTime);
-    let e;
-    if (isFilled(t.endDate, t.endTime)) e = combineDT(t.endDate, t.endTime);
-    else if (t.endDate && !t.endTime)   e = combineDT(t.endDate, "23:59");
-    else if (!t.endDate && t.endTime)   e = combineDT(t.startDate, t.endTime);
-    else                                e = new Date(new Date(s).getTime() + 60 * 60000).toISOString().slice(0, 19);
-    if (new Date(e) <= new Date(s))     e = new Date(new Date(s).getTime() + 30 * 60000).toISOString().slice(0, 19);
-    return attachTag({ summary: t.title, description: t.notes || "", start: { dateTime: s, timeZone: TIME_ZONE }, end: { dateTime: e, timeZone: TIME_ZONE }, transparency: t.done ? "transparent" : "opaque" }, t);
-  }
-  if (t.due) {
-    return attachTag({ summary: t.title, description: t.notes || "", start: { date: t.due, timeZone: TIME_ZONE }, end: { date: addOneDay(t.due), timeZone: TIME_ZONE }, transparency: t.done ? "transparent" : "opaque" }, t);
-  }
-  return fallback(t);
-}
+// Default fallback event
 function fallback(t) {
-  const s = new Date(); const e = new Date(s.getTime() + 30 * 60000);
-  return { summary: t.title, description: t.notes || "", start: { dateTime: s.toISOString().slice(0, 19), timeZone: TIME_ZONE }, end: { dateTime: e.toISOString().slice(0, 19), timeZone: TIME_ZONE } };
+  const s = new Date();
+  const e = new Date(s.getTime() + 30 * 60000);
+  return {
+    summary: t.title,
+    description: t.notes || "",
+    start: { dateTime: s.toISOString() },
+    end:   { dateTime: e.toISOString() },
+  };
 }
 
-async function ensureCalendarEvent(task) {
-  const cal = await getCalendar(); if (!cal) return task;
-  const body = buildEventFromTask(task);
-  if (task.googleEventId) {
-    const { data } = await cal.events.update({ calendarId: CALENDAR_ID, eventId: task.googleEventId, requestBody: body });
-    return { ...task, googleEventId: data.id };
-  } else {
-    const { data } = await cal.events.insert({ calendarId: CALENDAR_ID, requestBody: body });
-    return { ...task, googleEventId: data.id };
-  }
-}
-function isInvalidGrant(err) { return (err?.message || String(err)).toLowerCase().includes("invalid_grant"); }
-async function safeEnsureCalendarEvent(task) {
-  try { return await ensureCalendarEvent(task); }
-  catch (e) { if (isInvalidGrant(e)) console.warn("Calendar kihagyva (invalid_grant). Mentés folytatódik."); else console.error("Calendar sync hiba:", e?.message); return task; }
-}
+// ============================================================================
+// EXPRESS SERVER SETUP
+// ============================================================================
 
-/* ──────────────────────────────────────────────────────────────
-   7) REST API
-   ────────────────────────────────────────────────────────────── */
+const app = express();
+app.use(express.json());
 
-// 7.1) LIST: betöltéskor COMING → PROGRESS, ha ma aktív
-app.get("/api/tasks", async (_req, res) => {
-  try {
-    const tasks = await loadTasks();
+// Serve frontend (index.html and app.js)
+app.use(express.static(path.join(ROOT_DIR, "public")));
 
-    let changed = false;
-    for (const t of tasks) {
-      // csak a COMING-okat érinti; DONE/OVERDUE/PROGRESS marad, ahogy van
-      if ((t.status === "coming" || t.status === "COMING") && isActiveTodayByDates(t)) {
-        t.status = "progress"; // a kérés szerint PROGRESS legyen
-        changed = true;
-      }
-    }
-    if (changed) await saveTasks(tasks); // persistáljuk a státuszváltásokat
+// ============================================================================
+// GOOGLE AUTH ROUTES
+// ============================================================================
 
-    res.json(tasks);
-  } catch {
-    res.status(500).json({ error: "Betöltési hiba." });
+// Start OAuth login flow
+app.get("/auth/google", (req, res) => {
+  const oAuth2Client = getOAuthClient();
+  if (!oAuth2Client){ return res.status(500).send("Missing Google OAuth config"); }
+
+  const scopes = ["https://www.googleapis.com/auth/calendar"];
+
+  const url = oAuth2Client.generateAuthUrl({
+    access_type: "offline",
+    scope: scopes,
+    prompt: "consent",
+  });
+
+  res.redirect(url);
+});
+
+// OAuth callback: save tokens
+app.get("/oauth2callback", async (req, res) => {
+  const oAuth2Client = getOAuthClient();
+  if (!oAuth2Client){ return res.status(500).send("OAuth client missing"); }
+
+  const code = req.query.code;
+  if (!code) return res.status(400).send("Missing code parameter");
+
+  try{
+    const { tokens } = await oAuth2Client.getToken(code);
+    await saveTokens(tokens);
+    res.send("Google Calendar connected.");
+
+  } catch (e) {
+    console.error("OAuth error:", e?.message);
+    res.status(500).send("OAuth error.");
   }
 });
 
-// 7.2) CREATE
+// ============================================================================
+// TASK API ENDPOINTS
+// ============================================================================
+
+// Generate random ID
+function genId(){
+  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
+
+// GET all tasks
+app.get("/api/tasks", async (req, res) => {
+  try{
+    const tasks = await loadTasks();
+    res.json(tasks);
+  }catch(e){
+    console.error("GET /api/tasks error:", e?.message);
+    res.status(500).json({ error: "Load error." });
+  }
+});
+
+// POST create task
 app.post("/api/tasks", async (req, res) => {
   try {
+
     const {
       title = "", notes = "", tag = "", done = false,
-      allDay = false, startDate = null, startTime = null, endDate = null, endTime = null,
-      due = null,
-      status = "coming" // alapból COMING
+      allDay = false, startDate = null, startTime = null,
+      endDate = null, endTime = null, due = null, status = "coming",
+      trackedMs, trackStart, timeLog = "",
+      color = "yellow"
     } = req.body || {};
 
-    if (!title.trim()) return res.status(400).json({ error: "Title required" });
+    if (!title.trim()) {
+      return res.status(400).json({ error: "Title required" });
+    }
 
     const tasks = await loadTasks();
 
-    let task = {
+    // sanitize color
+    const safeColor =
+      typeof color === "string" && color.trim() !== ""
+        ? color.trim()
+        : "yellow";
+
+    // build task object
+    let task = ensureTrackFields({
       id: genId(),
       title: title.trim(),
-      notes, tag, done: !!done,
-      allDay: !!allDay, startDate, startTime, endDate, endTime,
+      notes,
+      tag,
+      done: !!done,
+      allDay: !!allDay,
+      startDate,
+      startTime,
+      endDate,
+      endTime,
       due,
       status,
-      googleEventId: null
-    };
+      trackedMs,
+      trackStart,
+      timeLog,
+      color: safeColor,
+      googleEventId: null,
+    });
 
+    // sync to Google Calendar (if enabled)
     task = await safeEnsureCalendarEvent(task);
+
+    // save in file
     tasks.push(task);
     await saveTasks(tasks);
-    res.status(201).json(task);
+
+    return res.status(201).json(task);
+
   } catch (e) {
-    console.error("POST /api/tasks hiba:", e?.message);
-    res.status(500).json({ error: "Létrehozási hiba." });
+    console.error("POST /api/tasks error:", e?.message);
+    return res.status(500).json({ error: "Creation error." });
   }
 });
 
-// 7.3) UPDATE
+
+// PUT update full task
+// Handles timeLog updates when leaving tracking
 app.put("/api/tasks/:id", async (req, res) => {
   try {
+    const { id }  = req.params;
+    const payload = req.body || {};
+
+    const tasks = await loadTasks();
+    const idx   = tasks.findIndex(t => String(t.id) === String(id));
+
+
+    if (idx === -1) return res.status(404).json({ error: "Not found" });
+
+    const old = ensureTrackFields({ ...tasks[idx] });
+    let merged = ensureTrackFields({ ...old, ...payload });
+
+    // Detect transition: leaving "tracking"
+    const leavingTracking = (old.status === "tracking") && (merged.status !== "tracking");
+
+    if (leavingTracking && old.trackStart) {
+      const startMs = new Date(old.trackStart).getTime();
+
+      if (!Number.isNaN(startMs)) {
+        const delta = Math.max(0, Date.now() - startMs);
+
+        if (delta > 0) {
+          // Create log entry like "2025-11-17 02:14:22"
+          const dateStr = currentLocalDateYMD();
+          const durStr  = formatDurationHMS(delta);
+          const entry   = `${dateStr} ${durStr}`;
+
+          const prevLog = (merged.timeLog ?? old.timeLog ?? "").toString().trim();
+          merged.timeLog = prevLog ? `${prevLog}, ${entry}` : entry;
+        }
+      }
+
+      // Reset counter
+      merged.trackedMs  = 0;
+      merged.trackStart = null;
+    }
+
+    // Detect transition: entering "tracking"
+    const enteringTracking = (old.status !== "tracking") && (merged.status === "tracking");
+    if (enteringTracking && !old.trackStart && !merged.trackStart) {
+      merged.trackStart = new Date().toISOString();
+    }
+
+    // Normalize values
+    merged.trackedMs = Number(merged.trackedMs || 0);
+    if (merged.trackStart !== null) merged.trackStart = String(merged.trackStart);
+    merged.timeLog = merged.timeLog == null ? "" : String(merged.timeLog);
+
+    // If content changed → update Calendar
+    const calFields = ["title","notes","done","allDay","startDate","startTime","endDate","endTime","due","tag"];
+    let needCalUpdate = false;
+    for (const k of calFields){
+      if (merged[k] !== old[k]) { needCalUpdate = true; break; }
+    }
+    if (needCalUpdate){
+      merged = await safeEnsureCalendarEvent(merged);
+    }
+
+    tasks[idx] = merged;
+    await saveTasks(tasks);
+
+    res.json(merged);
+
+  } catch (e) {
+    console.error("PUT /api/tasks error:", e?.message);
+    res.status(500).json({ error: "Update error." });
+  }
+});
+
+// PATCH partial update (same as PUT but selective)
+app.patch("/api/tasks/:id", async (req, res) => {
+  try{
     const { id }  = req.params;
     const payload = req.body || {};
 
@@ -235,40 +517,87 @@ app.put("/api/tasks/:id", async (req, res) => {
     const idx   = tasks.findIndex(t => t.id === id);
     if (idx === -1) return res.status(404).json({ error: "Not found" });
 
-    const updated = {
-      ...tasks[idx],
-      ...(payload.title      !== undefined ? { title: String(payload.title).trim() } : {}),
-      ...(payload.notes      !== undefined ? { notes: String(payload.notes) } : {}),
-      ...(payload.tag        !== undefined ? { tag:   String(payload.tag) }   : {}),
-      ...(payload.done       !== undefined ? { done:  !!payload.done }        : {}),
-      ...(payload.allDay     !== undefined ? { allDay:!!payload.allDay }      : {}),
-      ...(payload.startDate  !== undefined ? { startDate: payload.startDate || null } : {}),
-      ...(payload.startTime  !== undefined ? { startTime: payload.startTime || null } : {}),
-      ...(payload.endDate    !== undefined ? { endDate:   payload.endDate   || null } : {}),
-      ...(payload.endTime    !== undefined ? { endTime:   payload.endTime   || null } : {}),
-      ...(payload.due        !== undefined ? { due:       payload.due       || null } : {}),
-      ...(payload.status     !== undefined ? { status:    payload.status }           : {}),
-    };
+    const old = ensureTrackFields({ ...tasks[idx] });
+    let merged = ensureTrackFields({ ...old, ...payload });
 
-    // Csak tartalmi/idő mezőknél szinkronizáljuk a Calendar-t (status → nem)
+    // Same "leaving tracking" logic
+    const leavingTracking = (old.status === "tracking") && (merged.status !== "tracking");
+    if (leavingTracking && old.trackStart) {
+      const startMs = new Date(old.trackStart).getTime();
+      if (!Number.isNaN(startMs)) {
+        const delta = Math.max(0, Date.now() - startMs);
+
+        if (delta > 0) {
+          const dateStr = currentLocalDateYMD();
+          const durStr  = formatDurationHMS(delta);
+          const entry   = `${dateStr} ${durStr}`;
+
+          const prevLog = (merged.timeLog ?? old.timeLog ?? "").toString().trim();
+          merged.timeLog = prevLog ? `${prevLog}, ${entry}` : entry;
+        }
+      }
+	  // -- leaving TRACKING column --
+const leavingTracking = (old.status === "tracking") && (merged.status !== "tracking");
+
+      // DO NOT reset trackedMs — instead add the elapsed cycle
+	// --- leaving TRACKING: log time, then RESET counter ---
+if (leavingTracking && old.trackStart) {
+  const startMs = new Date(old.trackStart).getTime();
+  if (!Number.isNaN(startMs)) {
+    const delta = Math.max(0, Date.now() - startMs);
+
+    if (delta > 0) {
+      const dateStr = currentLocalDateYMD();
+      const durStr  = formatDurationHMS(delta);
+      const entry   = `${dateStr} ${durStr}`;
+
+      const prevLog = (merged.timeLog ?? old.timeLog ?? "").toString().trim();
+      merged.timeLog = prevLog ? `${prevLog}, ${entry}` : entry;
+    }
+  }
+
+  // <<< ITT NULLÁZZUK A TRACKELT IDŐT >>>
+  merged.trackedMs  = 0;
+  merged.trackStart = null;
+}
+
+
+    }
+
+    // Same "enter tracking" logic
+    const enteringTracking = (old.status !== "tracking") && (merged.status === "tracking");
+    if (enteringTracking && !old.trackStart && !merged.trackStart) {
+      merged.trackStart = new Date().toISOString();
+    }
+
+    merged.trackedMs = Number(merged.trackedMs || 0);
+    if (merged.trackStart !== null) merged.trackStart = String(merged.trackStart);
+    merged.timeLog = merged.timeLog == null ? "" : String(merged.timeLog);
+
+    // Calendar update check
     const calFields = ["title","notes","done","allDay","startDate","startTime","endDate","endTime","due","tag"];
-    const needCalSync = calFields.some(k => payload[k] !== undefined);
+    let needCalUpdate = false;
+    for (const k of calFields){
+      if (merged[k] !== old[k]) { needCalUpdate = true; break; }
+    }
+    if (needCalUpdate){
+      merged = await safeEnsureCalendarEvent(merged);
+    }
 
-    const result = needCalSync ? await safeEnsureCalendarEvent(updated) : updated;
-
-    tasks[idx] = result;
+    tasks[idx] = merged;
     await saveTasks(tasks);
 
-    res.json(result);
-  } catch (e) {
-    console.error("PUT /api/tasks/:id hiba:", e?.message);
-    res.status(500).json({ error: "Frissítési hiba." });
+    res.json(merged);
+
+  }catch(e){
+    console.error("PATCH /api/tasks error:", e?.message);
+    res.status(500).json({ error: "PATCH error." });
   }
 });
 
-// 7.4) DELETE
+// DELETE a task
 app.delete("/api/tasks/:id", async (req, res) => {
-  try {
+  try{
     const { id } = req.params;
 
     const tasks = await loadTasks();
@@ -277,44 +606,94 @@ app.delete("/api/tasks/:id", async (req, res) => {
 
     const [removed] = tasks.splice(idx, 1);
 
-    try {
-      const cal = await getCalendar();
-      if (cal && removed.googleEventId) {
-        await cal.events.delete({ calendarId: CALENDAR_ID, eventId: removed.googleEventId });
+    await saveTasks(tasks);
+    await safeDeleteCalendarEvent(removed);
+
+    res.json({ ok: true });
+
+  }catch(e){
+    console.error("DELETE /api/tasks error:", e?.message);
+    res.status(500).json({ error: "Delete error." });
+  }
+});
+
+// ============================================================================
+// SIMPLE MONTHLY REPORT
+// ============================================================================
+
+// Produces a CSV "Title;Hours" from total logged time
+// --- SIMPLE MONTHLY REPORT --------------------------------------------------
+
+// Produces a CSV "Title;Hours;TimeLog" from total logged time.
+// Hours = timeLog (parsed to ms) + trackedMs + any currently running tracking.
+app.get("/api/reports/monthly", async (req, res) => {
+  try{
+    const tasks = await loadTasks();
+    const now = Date.now();
+
+    const rows = [];
+    let totalMs = 0;
+
+    for (const t of tasks){
+      // parse timeLog into milliseconds
+      const logMs   = parseTimeLogMs(t.timeLog || "");
+      const trackMs = Number(t.trackedMs || 0);
+
+      // if task is currently in tracking status, include runtime until now
+      const extra = (t.status === "tracking" && t.trackStart)
+        ? Math.max(0, now - new Date(t.trackStart).getTime())
+        : 0;
+
+      const ms = logMs + trackMs + extra;
+
+      if (ms > 0){
+        rows.push({
+          title:   String(t.title || ""),
+          hours:   ms / 3600000,
+          timeLog: (t.timeLog || "").replace(/;/g, ","), // avoid breaking CSV separator
+        });
+        totalMs += ms;
       }
-    } catch (e) {
-      console.warn("Calendar törlés sikertelen:", e?.message);
     }
 
-    await saveTasks(tasks);
-    res.json(removed);
-  } catch (e) {
-    console.error("DELETE /api/tasks/:id hiba:", e?.message);
-    res.status(500).json({ error: "Törlési hiba." });
+    // sort by hours descending
+    rows.sort((a,b) => b.hours - a.hours);
+
+    const sep = ";"; // Excel-friendly separator in EU locales
+
+    // Header / note line
+    let csv = "Note: This report is not time-sliced; values represent total measured time.\n";
+
+    // CSV header
+    csv += ["Title","Hours","TimeLog"].join(sep) + "\n";
+
+    // CSV rows
+    for (const r of rows){
+      csv += [
+        r.title,
+        r.hours.toFixed(2),
+        r.timeLog
+      ].join(sep) + "\n";
+    }
+
+    // Total line (no timeLog)
+    csv += ["Total", (totalMs / 3600000).toFixed(2), ""].join(sep) + "\n";
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.send(csv);
+
+  }catch(e){
+    console.error("GET /api/reports/monthly error:", e?.message);
+    res.status(500).json({ error: "Report error." });
   }
 });
 
-// (opcionális) naptárak listája
-app.get("/api/debug/calendars", async (_req, res) => {
-  try {
-    const cal = await getCalendar();
-    if (!cal) return res.status(401).json({ error: "Nincs Google-auth (előbb /auth/google)" });
-    const { data } = await cal.calendarList.list();
-    const out = (data.items || []).map(c => ({ summary: c.summary, id: c.id, primary: !!c.primary }));
-    res.json(out);
-  } catch (e) {
-    res.status(500).json({ error: "Nem sikerült lekérdezni a naptárakat." });
-  }
-});
 
-/* ──────────────────────────────────────────────────────────────
-   8) Start
-   ────────────────────────────────────────────────────────────── */
+// ============================================================================
+// START SERVER
+// ============================================================================
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`TaskManager:   http://localhost:${PORT}`);
-  console.log(`Google auth:   http://localhost:${PORT}/auth/google`);
-  console.log(`Data dir:      ${DATA_DIR}`);
-  console.log(`Calendar ID:   ${CALENDAR_ID}`);
+  console.log("Task Manager running at: http://localhost:" + PORT);
 });

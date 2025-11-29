@@ -2,7 +2,7 @@
 <html lang="hu">
 <head>
   <meta charset="utf-8" />
-  <title>TaskManager — Kanban (COMING / ACTIVE / OVERDUE / DONE)</title>
+  <title>TaskManager — Kanban (COMING / ACTIVE / TRACKING / OVERDUE / DONE)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&display=swap" rel="stylesheet">
   <style>
@@ -16,9 +16,8 @@
     .inline{ display:inline-flex; gap:8px; align-items:center; }
     .muted{ color:var(--muted); font-size:.9rem; }
 
-    /* ── Kanban háttér: 4 oszlop, teljes szélességre nyúlik */
     .board{
-      display:grid; grid-template-columns: repeat(4, minmax(280px, 1fr));
+      display:grid; grid-template-columns: repeat(5, minmax(240px, 1fr));
       gap: clamp(12px, 2vw, 28px);
       min-height: 520px;
       width: 100%;
@@ -34,6 +33,7 @@
     }
     .col[data-status="coming"]  .col-header{ color:#0b7285; }
     .col[data-status="active"]  .col-header{ color:#b35c00; }
+    .col[data-status="tracking"] .col-header{ color:#8b00b3; }
     .col[data-status="overdue"] .col-header{ color:#a10000; }
     .col[data-status="done"]    .col-header{ color:#2b8a3e; }
 
@@ -43,7 +43,6 @@
     }
     .col-list.drag-over{ outline:2px dashed rgba(0,0,0,.2); outline-offset:-6px; }
 
-    /* ── Sticky cetli (kártya) */
     .card{
       position:relative; padding:14px 12px 12px;
       border:1.5px solid rgba(0,0,0,.1); border-radius:10px;
@@ -54,15 +53,15 @@
     }
     .card.dragging{ opacity:.85; box-shadow: 0 12px 26px rgba(0,0,0,.16), 0 6px 12px rgba(0,0,0,.12); }
     .card::before{ content:"📌"; position:absolute; left:14px; top:-10px; font-size:20px; transform:rotate(-12deg); filter: drop-shadow(0 2px 1px rgba(0,0,0,.25)); }
-    .note-title{ font-size:18px; font-weight:700; margin:0 28px 6px 0; line-height:1.2; color:#000; } /* nincs piros kiemelés */
+    .note-title{ font-size:18px; font-weight:700; margin:0 28px 6px 0; line-height:1.2; color:#000; }
     .meta{ display:grid; grid-template-columns:auto 1fr; gap:.35rem .45rem; align-items:baseline; }
     .when{ font-size:.95rem; color:#444; }
     .desc{ font-size:1rem; color:#2a2a2a; display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical; overflow:hidden; }
     .tag{ display:inline-block; margin-top:6px; padding:.1rem .5rem; border:1px dashed rgba(0,0,0,.22); border-radius:999px; font-size:.9rem; color:#222; background:rgba(255,255,255,.5) }
     .actions{ position:absolute; top:6px; right:6px; display:flex; gap:6px; }
     .actions .btn{ padding:.25rem .5rem; border-radius:.35rem; border:1px solid rgba(0,0,0,.25); background:#ffffffce }
+    .timer{ font-weight:700; }
 
-    /* űrlap + naptár */
     #calendarSection{ margin:12px 0 16px; }
     iframe{ background:#fff; border-radius:10px; }
     #formSection{ margin-top:10px; }
@@ -71,27 +70,60 @@
     .row{ display:grid; gap:.6rem; grid-template-columns:repeat(4,minmax(0,1fr)); }
     input,textarea{ padding:.55rem .7rem; border:1px solid var(--border); border-radius:.5rem; background:#fff; }
     textarea{ resize:vertical; min-height:84px; }
-    @media (max-width:1200px){ .board{ grid-template-columns: repeat(2, minmax(280px,1fr)); } }
-    @media (max-width:650px){ .board{ grid-template-columns: 1fr; } .row{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media (max-width:1400px){ .board{ grid-template-columns: repeat(3, minmax(260px,1fr)); } }
+    @media (max-width:900px){ .board{ grid-template-columns: repeat(2, minmax(260px,1fr)); } }
+    @media (max-width:600px){ .board{ grid-template-columns: 1fr; } .row{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
     @media (max-width:520px){ .row{ grid-template-columns:1fr; } }
+	/* Pastel color variants for cards */
+.card.color-red {
+  background:#ffe5e5;
+  border-color:#ffb3b3;
+}
+
+.card.color-yellow {
+  background:#fffbe6;  /* same as default card color */
+  border-color:#f5d97a;
+}
+
+.card.color-blue {
+  background:#e3f1ff;
+  border-color:#b5d4ff;
+}
+
+.card.color-green {
+  background:#e4f7e6;
+  border-color:#b4e3bc;
+}
+
+.card.color-gray {
+  background:#f3f3f3;
+  border-color:#d0d0d0;
+}
+
+.card.color-orange {
+  background:#ffe9d6;
+  border-color:#ffcc9e;
+}
+
   </style>
 </head>
 <body>
   <header>
-    <h1>TaskManager — Kanban (COMING / ACTIVE / OVERDUE / DONE)</h1>
+    <h1>TaskManager — Kanban (COMING / ACTIVE / TRACKING / OVERDUE / DONE)</h1>
     <div class="inline">
-      <a class="btn" href="/auth/google">Google auth</a>
-      <button id="toggleCalBtn" class="btn">Calendar</button>
-      <button id="newBtn" class="btn">+ New</button>
-    </div>
+  <a class="btn" href="/auth/google">Google auth</a>
+  <button id="toggleCalBtn" class="btn">Calendar</button>
+  <button id="newBtn" class="btn">+ New</button>
+  <!-- ÚJ: havi riport -->
+  <button id="reportBtn" class="btn">Monthly report (CSV)</button>
+</div>
+
   </header>
 
-  <!-- GCal embed -->
   <section id="calendarSection" hidden>
     <iframe id="gcalFrame" width="100%" height="540" frameborder="0" scrolling="no"></iframe>
   </section>
 
-  <!-- KANBAN BOARD: 4 oszlop -->
   <section id="listSection">
     <div class="board" id="board">
       <div class="col" data-status="coming">
@@ -101,6 +133,10 @@
       <div class="col" data-status="active">
         <div class="col-header">ACTIVE</div>
         <div class="col-list" id="col-active"></div>
+      </div>
+      <div class="col" data-status="tracking">
+        <div class="col-header">TRACKING</div>
+        <div class="col-list" id="col-tracking"></div>
       </div>
       <div class="col" data-status="overdue">
         <div class="col-header">OVERDUE</div>
@@ -113,7 +149,6 @@
     </div>
   </section>
 
-  <!-- Szerkesztő űrlap -->
   <section id="formSection" hidden>
     <h2 id="formTitle" style="margin:.25rem 0 0">New Task</h2>
     <form id="taskForm">
@@ -130,13 +165,45 @@
         <label>End date   <input type="date" name="endDate" /></label>
         <label>End time   <input type="time" name="endTime" step="60" /></label>
       </div>
-      <label>Notes <textarea name="notes" rows="4" placeholder="Jegyzet a cetlire..."></textarea></label>
-      <label class="inline" style="gap:6px"><input type="checkbox" name="done" /> Kész</label>
+<label>Notes <textarea name="notes" rows="4" placeholder="Jegyzet a cetlire..."></textarea></label>
+
+<label>Working hours
+  <input type="number" name="trackedHours" step="0.01" min="0" placeholder="pl. 1.5" />
+  <span class="muted">(1 óra = 3600000 ms)</span>
+</label>
+
+<label>Timesheet
+  <textarea name="timeLog" rows="3" placeholder="2025-11-14:01:30:00, 2025-11-14:00:45:00"></textarea>
+  <span class="muted">Format (HH:MM:SS), comma separated.</span>
+</label>
+<label>Color
+  <select name="color">
+    <option value="yellow">Yellow (default)</option>
+    <option value="red">Red</option>
+    <option value="blue">Blue</option>
+    <option value="green">Green</option>
+    <option value="gray">Gray</option>
+    <option value="orange">Orange</option>
+  </select>
+  <span class="muted">Light pastel colors for better readability.</span>
+</label>
+
+
+<label class="inline" style="gap:6px"><input type="checkbox" name="done" /> Ready</label>
+
       <div class="inline"><button class="btn" type="submit">Save</button><button class="btn" type="button" id="cancelBtn">Cancel</button></div>
     </form>
   </section>
 
-  <!-- kliens logika -->
+
+<div id="csvModal" style="display:none; position:fixed; inset:0; background:#0008; z-index:999; align-items:center; justify-content:center;">
+  <div style="background:#fff; padding:20px; border-radius:8px; max-width:800px; width:90%; max-height:80%; overflow:auto;">
+    <h3>Riport (CSV előnézet)</h3>
+    <pre id="csvContent" style="white-space:pre-wrap; font-family:monospace;"></pre>
+    <button onclick="document.getElementById('csvModal').style.display='none'" class="btn">Bezár</button>
+  </div>
+</div>
+
   <script src="app.js"></script>
 </body>
 </html>
