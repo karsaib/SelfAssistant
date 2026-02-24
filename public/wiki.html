@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wiki — Knowledge Base</title>
+  <style>
+    :root{ --bg:#f5f6fb; --ink:#1f1f1f; --muted:#60646c; --border:#e1e4ec; }
+    *{ box-sizing:border-box; }
+    body{ margin:0; padding:18px; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+    header{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+    h1{ font-size:18px; margin:0; }
+    .btn{ padding:.45rem .8rem; border:1px solid #999; background:#fff; border-radius:.5rem; cursor:pointer; text-decoration:none; color:inherit; }
+    .muted{ color:var(--muted); font-size:.9rem; }
+    .layout{ display:grid; grid-template-columns: 320px 1fr 1fr; gap:12px; }
+@media (max-width: 1100px){ .layout{ grid-template-columns:1fr; } }
+    .panel{ background:#fff; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+    .panel h2{ margin:0; padding:10px 12px; font-size:14px; background:#eef2ff; border-bottom:1px solid var(--border); }
+    .list{ padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
+    .item{ display:flex; justify-content:space-between; gap:10px; align-items:center; padding:8px 10px; border:1px solid var(--border); border-radius:10px; background:#fff; }
+    .item a{ text-decoration:none; color:inherit; font-weight:600; }
+    .item small{ color:var(--muted); }
+    .row{ display:flex; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border); }
+    input{ width:100%; padding:.55rem .7rem; border:1px solid var(--border); border-radius:.5rem; }
+    textarea{ width:100%; min-height:65vh; padding:12px; border:0; outline:0; resize:vertical; font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace; font-size:13px; }
+    .toolbar{ display:flex; gap:8px; align-items:center; padding:10px 12px; border-top:1px solid var(--border); background:#fafbff; flex-wrap:wrap; }
+    .grow{ flex:1; }
+    @media (max-width: 900px){ .layout{ grid-template-columns:1fr; } textarea{ min-height:50vh; } }
+    .preview{
+  padding: 12px;
+  min-height: 65vh;
+  overflow: auto;
+}
+.preview :is(h1,h2,h3){ margin-top: 1.1em; }
+.preview pre{
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow:auto;
+  background:#fafbff;
+}
+.preview code{
+  font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+  font-size: 12.5px;
+}
+.preview table{
+  border-collapse: collapse;
+  width: 100%;
+}
+.preview th,.preview td{
+  border:1px solid var(--border);
+  padding:6px 8px;
+}
+.preview blockquote{
+  border-left: 3px solid #c7cbe0;
+  margin: 10px 0;
+  padding: 6px 10px;
+  color: var(--muted);
+}
+  </style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+  <header>
+    <a class="btn" href="/index.html">← TaskManager</a>
+    <h1>🧠 Wiki (Knowledge Base)</h1>
+    <span class="muted">Markdown fájlok: <code>/docs/wiki/*.md</code></span>
+  </header>
+
+  <div class="layout">
+    <section class="panel">
+      <h2>Oldalak</h2>
+
+      <div class="row">
+        <input id="newSlug" placeholder="new page slug (pl. mom_2026-02-23)" />
+        <button class="btn" id="newBtn">+ Create</button>
+      </div>
+
+      <div class="list" id="pages"></div>
+    </section>
+
+    <section class="panel">
+      <h2 id="editorTitle">Szerkesztő</h2>
+
+      <div class="row">
+        <input id="currentSlug" placeholder="slug" disabled />
+        <a class="btn" id="openRaw" href="#" target="_blank" rel="noopener">Open .md</a>
+      </div>
+
+      <textarea id="md" placeholder="# Content(Markdown) ..."></textarea>
+
+      <div class="toolbar">
+        <span class="muted" id="status">—</span>
+        <span class="grow"></span>
+        <button class="btn" id="reloadBtn">Reload</button>
+        <button class="btn" id="saveBtn">Save</button>
+        <button class="btn" id="deleteBtn">Delete</button>
+      </div>
+    </section>
+    <section class="panel">
+  <h2>Előnézet</h2>
+  <div class="row">
+    <span class="muted">Live Markdown render</span>
+  </div>
+  <div id="preview" class="preview"></div>
+</section>
+  </div>
+
+<script>
+  const elPages = document.getElementById("pages");
+  const elNewSlug = document.getElementById("newSlug");
+  const elNewBtn = document.getElementById("newBtn");
+  const elCurrentSlug = document.getElementById("currentSlug");
+  const elMd = document.getElementById("md");
+  const elStatus = document.getElementById("status");
+  const elOpenRaw = document.getElementById("openRaw");
+  const elReload = document.getElementById("reloadBtn");
+  const elSave = document.getElementById("saveBtn");
+  const elDelete = document.getElementById("deleteBtn");
+  const elEditorTitle = document.getElementById("editorTitle");
+const elPreview = document.getElementById("preview");
+  let current = null;
+
+  function setStatus(msg){ elStatus.textContent = msg; }
+
+  async function api(path, opts){
+    const res = await fetch(path, opts);
+    if (!res.ok) {
+      let body = "";
+      try { body = await res.text(); } catch {}
+      throw new Error(res.status + " " + res.statusText + (body ? " — " + body : ""));
+    }
+    if (res.status === 204) return null;
+    return await res.json();
+  }
+  
+  function renderPreview(){
+  if (!elPreview) return;
+
+  if (typeof marked === "undefined" || typeof DOMPurify === "undefined") {
+    elPreview.textContent = "Preview library has not loaded.";
+    return;
+  }
+
+  const md = elMd.value || "";
+
+  const unsafeHtml = marked.parse(md, {
+    gfm: true,
+    breaks: false
+  });
+
+  const safeHtml = DOMPurify.sanitize(unsafeHtml, {
+    USE_PROFILES: { html: true }
+  });
+
+  elPreview.innerHTML = safeHtml;
+}
+
+  async function loadPages(){
+    const pages = await api("/api/wiki-pages");
+    elPages.innerHTML = "";
+    if (!pages.length){
+      elPages.innerHTML = `<div class="muted">Még nincs oldal. Hozz létre egyet bal oldalt.</div>`;
+      return;
+    }
+        for (const p of pages){
+          const div = document.createElement("div");
+          div.className = "item";
+
+          const left = document.createElement("div");
+
+          const a = document.createElement("a");
+          a.href = "#";
+          a.textContent = p.title || p.slug;
+          a.onclick = (e) => { 
+            e.preventDefault(); 
+            openPage(p.slug); 
+          };
+
+          const meta = document.createElement("small");
+          meta.style.display = "block";
+          meta.style.marginTop = "4px";
+
+          const tagPart = (p.tags && p.tags.length)
+            ? "#" + p.tags.join("  #")
+            : "";
+
+          const typePart = p.type ? `   [${p.type}]` : "";
+          const updatedPart = p.updated ? `   · ${p.updated}` : "";
+
+          meta.textContent = tagPart + typePart + updatedPart;
+
+          left.appendChild(a);
+          left.appendChild(meta);
+
+          div.appendChild(left);
+          elPages.appendChild(div);
+        }
+  
+
+ }
+  async function openPage(slug){
+    const data = await api("/api/wiki/" + encodeURIComponent(slug));
+    current = slug;
+    elCurrentSlug.value = slug;
+    elEditorTitle.textContent = "Szerkesztő — " + slug;
+    elMd.value = data.md || "";
+    elOpenRaw.href = "/docs/wiki/" + encodeURIComponent(slug) + ".md";
+    renderPreview();
+    setStatus("Loaded: " + slug);
+  }
+
+  async function createPage(slug){
+    // üres fájl létrehozása mentéssel
+    await api("/api/wiki/" + encodeURIComponent(slug), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ md: `# ${slug}\n\n` })
+    });
+    await loadPages();
+    await openPage(slug);
+  }
+
+  async function savePage(){
+  if (!current) return setStatus("There is no selected page. .");
+
+  const t0 = Date.now();
+  elSave.disabled = true;
+  const oldText = elSave.textContent;
+  elSave.textContent = "Saving...";
+
+  try{
+    await api("/api/wiki/" + encodeURIComponent(current), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ md: elMd.value })
+    });
+
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2,"0");
+    const mm = String(now.getMinutes()).padStart(2,"0");
+    const ss = String(now.getSeconds()).padStart(2,"0");
+
+    setStatus(`✅ Saved: ${current} · ${hh}:${mm}:${ss} · ${Date.now()-t0}ms`);
+    await loadPages();
+  }catch(e){
+    console.error(e);
+    setStatus("❌ Mentés hiba: " + e.message);
+  }finally{
+    elSave.disabled = false;
+    elSave.textContent = oldText;
+  }
+}
+
+  async function deletePage(){
+    if (!current) return setStatus("Nincs kiválasztott oldal.");
+    if (!confirm("Biztos törlöd? " + current)) return;
+    await api("/api/wiki/" + encodeURIComponent(current), { method: "DELETE" });
+    setStatus("Deleted: " + current);
+    current = null;
+    elCurrentSlug.value = "";
+    elEditorTitle.textContent = "Szerkesztő";
+    elMd.value = "";
+    elOpenRaw.href = "#";
+    renderPreview();
+ await loadPages();
+  }
+
+  elNewBtn.onclick = async () => {
+    const slug = (elNewSlug.value || "").trim();
+    if (!slug) return setStatus("Adj meg slug-ot.");
+    // minimál slug validáció
+    if (!/^[a-zA-Z0-9_-]+$/.test(slug)) return setStatus("Slug: csak betű/szám/_/- engedett.");
+    await createPage(slug);
+    elNewSlug.value = "";
+  };
+
+  elReload.onclick = async () => {
+    if (!current) return setStatus("Nincs kiválasztott oldal.");
+    await openPage(current);
+  };
+
+  elSave.onclick = savePage;
+  elDelete.onclick = deletePage;
+
+  // init
+  (async function(){
+    try{
+      await loadPages();
+      setStatus("Ready.");
+    }catch(e){
+      console.error(e);
+      setStatus("Hiba: " + e.message);
+    }
+  })();
+  elMd.addEventListener("input", renderPreview);
+</script>
+</body>
+</html>

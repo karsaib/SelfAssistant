@@ -5,6 +5,7 @@
   <title>TaskManager — Kanban (COMING / ACTIVE / TRACKING / OVERDUE / DONE)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&display=swap" rel="stylesheet">
+
   <style>
     :root{ --bg:#f5f6fb; --ink:#1f1f1f; --muted:#60646c; --border:#e1e4ec; }
     *{box-sizing:border-box}
@@ -16,12 +17,7 @@
     .inline{ display:inline-flex; gap:8px; align-items:center; }
     .muted{ color:var(--muted); font-size:.9rem; }
 
-    .board{
-      display:grid; grid-template-columns: repeat(5, minmax(240px, 1fr));
-      gap: clamp(12px, 2vw, 28px);
-      min-height: 520px;
-      width: 100%;
-    }
+
     .col{
       background: linear-gradient(180deg,#fff, #f7f9ff);
       border:1px solid var(--border); border-radius:12px; overflow:hidden;
@@ -106,17 +102,31 @@
 }
 
   </style>
+  
+    <link rel="stylesheet" href="/style-board.css">
 </head>
 <body>
   <header>
-    <h1>TaskManager — Kanban (COMING / ACTIVE / TRACKING / OVERDUE / DONE)</h1>
+    <h1>TaskManager</h1>
+
     <div class="inline">
-  <a class="btn" href="/auth/google">Google auth</a>
-  <button id="toggleCalBtn" class="btn">Calendar</button>
-  <button id="newBtn" class="btn">+ New</button>
-  <!-- ÚJ: havi riport -->
-  <button id="reportBtn" class="btn">Monthly report (CSV)</button>
-</div>
+      <a class="btn" href="/auth/google">Google auth</a>
+      <button id="toggleCalBtn" class="btn">Calendar</button>
+      <button id="newBtn" class="btn">+ New</button>
+      <button id="reportBtn" class="btn">Monthly report (CSV)</button>
+
+      <!-- Dokumentumtár ikon + gomb stílusban -->
+      <a class="btn" href="doc.html" title="Dokumentumtár">
+        📁 Document store
+      </a>
+      
+      <a class="btn" href="wiki.html" title="Tudásbázis / Wiki">
+  🧠 Wiki
+</a>
+    </div>
+
+  </header>
+
 
   </header>
 
@@ -125,29 +135,38 @@
   </section>
 
   <section id="listSection">
-    <div class="board" id="board">
-      <div class="col" data-status="coming">
-        <div class="col-header">COMING</div>
-        <div class="col-list" id="col-coming"></div>
-      </div>
-      <div class="col" data-status="active">
-        <div class="col-header">ACTIVE</div>
-        <div class="col-list" id="col-active"></div>
-      </div>
-      <div class="col" data-status="tracking">
-        <div class="col-header">TRACKING</div>
-        <div class="col-list" id="col-tracking"></div>
-      </div>
-      <div class="col" data-status="overdue">
-        <div class="col-header">OVERDUE</div>
-        <div class="col-list" id="col-overdue"></div>
-      </div>
-      <div class="col" data-status="done">
-        <div class="col-header">DONE</div>
-        <div class="col-list" id="col-done"></div>
-      </div>
+  <div class="board" id="board">
+
+   
+
+
+
+    <div class="col" data-status="coming">
+      <div class="col-title">BACKLOG</div>
+      <div class="col-list" id="col-coming"></div>
     </div>
-  </section>
+ <div class="col" data-status="active">
+      <div class="col-title">ACTIVE</div>
+      <div class="col-list" id="col-active"></div>
+    </div>
+    <div class="col" data-status="tracking">
+      <div class="col-title">TRACKING</div>
+      <div class="col-list" id="col-tracking"></div>
+    </div>
+
+    <div class="col" data-status="overdue">
+      <div class="col-title">OVERDUE</div>
+      <div class="col-list" id="col-overdue"></div>
+    </div>
+
+    <div class="col" data-status="done">
+      <div class="col-title">DONE</div>
+      <div class="col-list" id="col-done"></div>
+    </div>
+
+  </div>
+</section>
+
 
   <section id="formSection" hidden>
     <h2 id="formTitle" style="margin:.25rem 0 0">New Task</h2>
@@ -204,6 +223,6 @@
   </div>
 </div>
 
-  <script src="app.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>

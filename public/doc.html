@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="hu">
+<head>
+ <meta charset="UTF-8" />
+<title>Document Tree</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+h1 { margin-top: 0; }
+#controls { margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+#searchInput { padding: 4px 8px; min-width: 260px; }
+.hint { font-size: 0.85rem; color: #555; }
+.tree { list-style-type: none; padding-left: 0; }
+.tree ul { list-style-type: none; margin-left: 18px; padding-left: 12px; border-left: 1px solid #ccc; }
+.folder-label { cursor: pointer; user-select: none; }
+.folder-label::before { content: '\25BE '; font-size: 0.8rem; display: inline-block; width: 1em; }
+.folder.collapsed > .folder-label::before { content: '\25B8 '; }
+.folder.collapsed > ul.children { display: none; }
+a { text-decoration: none; color: #0645ad; }
+a:hover { text-decoration: underline; }
+.file { margin: 2px 0; }
+.edit-btn { margin-left: 6px; padding: 2px 6px; font-size: 0.8rem; cursor: pointer; }
+#editorPanel { margin-top: 18px; border: 1px solid #ccc; padding: 10px; border-radius: 6px; background: #fafafa; }
+.editor-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.editor-title { font-weight: bold; }
+.editor-filename { font-family: monospace; margin-left: 4px; }
+.close-btn { border: none; background: transparent; cursor: pointer; font-size: 1rem; }
+#editorText { width: 100%; min-height: 220px; font-family: Consolas, monospace; font-size: 0.9rem; padding: 6px; box-sizing: border-box; }
+.editor-actions { margin-top: 8px; display: flex; align-items: center; gap: 10px; }
+.btn { padding: 4px 10px; border-radius: 4px; border: 1px solid #4f8cff; background: #4f8cff; color: white; cursor: pointer; font-size: 0.85rem; }
+.btn:hover { background: #3a6fdc; }
+.editor-note { font-size: 0.8rem; color: #666; }
+</style>
+
+</head>
+<body>
+  <h1>Dokumentumtár</h1>
+  <input id="q" placeholder="Keresés..." oninput="render()" />
+  <div id="editorPanel" style="display:none;">
+  <div class="editor-header">
+    <span class="editor-title">Szövegfájl szerkesztése:</span>
+    <span id="editorFilename" class="editor-filename"></span>
+    <button type="button" class="close-btn" onclick="closeEditor()">✖</button>
+  </div>
+
+  <textarea id="editorText" spellcheck="false"></textarea>
+
+  <div class="editor-actions">
+    <button type="button" class="btn" onclick="downloadEdited()">Szerkesztett verzió letöltése</button>
+    <span class="editor-note">Mentés még letöltéssel történik.</span>
+  </div>
+</div>
+
+  <div id="tree"></div>
+
+<script>
+let cache = new Map();   // path -> items
+let expanded = new Set(); // mely mappák nyitottak
+
+async function load(path="") {
+  if (cache.has(path)) return cache.get(path);
+
+  const r = await fetch(`/api/docs-tree?path=${encodeURIComponent(path)}`);
+  if (!r.ok) {
+    console.error("docs-tree HTTP error:", r.status, await r.text());
+    cache.set(path, []);
+    return [];
+  }
+
+  const j = await r.json();
+
+  // A backend tömböt ad vissza, nem {items:...}-t
+  const items = Array.isArray(j)
+    ? j
+    : (j && Array.isArray(j.items) ? j.items : []);
+
+  cache.set(path, items);
+  return items;
+}
+
+
+function icon(item){
+  if (item.type === 'dir') return '📁';
+  const ext = (item.name.split('.').pop() || '').toLowerCase();
+  if (ext === 'txt' || ext === 'md') return '📝';
+  if (ext === 'pdf') return '📕';
+  if (ext === 'doc' || ext === 'docx') return '📄';
+  if (ext === 'html' || ext === 'htm') return '🌐';
+  return '📄';
+}
+const DOC_BASE = '/docs/';
+
+function openEditorByRelPath(rel) {
+  const url = DOC_BASE + rel;
+
+  const panel = document.getElementById('editorPanel');
+  const ta = document.getElementById('editorText');
+  const fn = document.getElementById('editorFilename');
+
+  fn.textContent = rel;
+  panel.style.display = 'block';
+  ta.value = 'Betöltés...';
+
+  fetch(url)
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(text => { ta.value = text; })
+    .catch(err => { ta.value = 'Hiba a fájl betöltésekor: ' + err; });
+}
+
+async function renderNode(path, container, level = 0) {
+  const items = await load(path);
+  const q = document.getElementById('q').value.toLowerCase();
+
+  for (const it of items) {
+    if (q && !it.name.toLowerCase().includes(q)) continue;
+
+    const row = document.createElement('div');
+    row.className = 'row ' + (it.type === 'dir' ? 'dir' : 'file');
+    row.style.marginLeft = (level * 18) + 'px';
+
+    if (it.type === 'dir') {
+      row.textContent = `${icon(it)} ${it.name}`;
+      row.onclick = async () => {
+        if (expanded.has(it.relPath)) expanded.delete(it.relPath);
+        else expanded.add(it.relPath);
+        await render();
+      };
+      container.appendChild(row);
+
+      if (expanded.has(it.relPath)) {
+        await renderNode(it.relPath, container, level + 1);
+      }
+      continue;
+    }
+
+    // file row
+    row.textContent = '';
+    const a = document.createElement('a');
+    a.href = (`/docs/${it.relPath}`).replaceAll('\\', '/');
+    a.target = '_blank';
+    a.textContent = `${icon(it)} ${it.name}`;
+    row.appendChild(a);
+
+    const ext = (it.name.split('.').pop() || '').toLowerCase();
+    if (ext === 'txt') {
+      row.appendChild(document.createTextNode(' '));
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'edit-btn';
+      btn.textContent = '✏️ Szerkesztés';
+      btn.onclick = () => openEditorByRelPath(it.relPath);
+      row.appendChild(btn);
+    }
+
+    container.appendChild(row);
+  }
+}
+
+
+function downloadEdited(){
+  const ta = document.getElementById('editorText');
+  const fn = document.getElementById('editorFilename');
+
+  if (!ta || !fn || !fn.textContent){
+    alert("Nincs mit letölteni.");
+    return;
+  }
+
+  const content = ta.value;
+  const filename = fn.textContent.split('/').pop(); // csak a fájlnév
+
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+
+
+async function render() {
+  const root = document.getElementById('tree');
+  root.innerHTML = '';
+  await renderNode('', root, 0);
+}
+
+render();
+</script>
+</body>
+</html>

@@ -98,18 +98,24 @@ function findTask(id){
 function currentElapsedMs(t){
   let ms = Number(t.trackedMs || 0);
   if (t.status === "tracking" && t.trackStart){
-    const start = Date.parse(t.trackStart);
-    if (!Number.isNaN(start)){
-      ms += Math.max(0, Date.now() - start);
-    }
+   const start = (typeof t.trackStart === "number")
+  ? t.trackStart
+  : Date.parse(t.trackStart);
+
+if (Number.isFinite(start)){
+  ms += Math.max(0, Date.now() - start);
+}
+
   }
   return ms;
 }
 
 // Timer label used on cards
 function timerLabel(t){
+  if (t.status !== "tracking") return "00:00:00";
   return formatMs(currentElapsedMs(t));
 }
+
 
 // Human-readable time window (the "időablak" on card)
 function fmtTimeWindow(t) {
@@ -158,6 +164,11 @@ function render(){
     card.className = "card";
     card.draggable = true;
     card.dataset.id = t.id;
+	// === TRACKING: futó időmérés vizuális jelölése ===
+if (t.status === "tracking" && t.trackStart) {
+  card.classList.add("tracking-running");
+}
+
 
     // Apply color class based on t.color
     if (t.color && t.color !== "yellow") {
@@ -274,7 +285,9 @@ function setupDropZones(){
       if (!t) return;
 
       const colEl = ev.currentTarget;
-      const newStatus = (colEl.parentElement && colEl.parentElement.dataset.status) || "coming";
+      const wrap = colEl.closest("[data-status]");
+const newStatus = (wrap && wrap.dataset.status) ? wrap.dataset.status : "coming";
+
       if (newStatus === t.status) return;
 
       const patch = { status: newStatus };
@@ -361,8 +374,9 @@ function openFormForEdit(id){
 
   // Working hours: same logic as board timer
   if (trackedHoursField){
-    const ms = currentElapsedMs(t);
-    trackedHoursField.value = ms > 0 ? (ms / 3600000).toFixed(2) : "";
+    const msTotal = Number(t.trackedMsTotal ?? t.trackedMs ?? 0);
+trackedHoursField.value = msTotal > 0 ? (msTotal / 3600000).toFixed(2) : "";
+
   }
 
   // timeLog text
@@ -523,17 +537,16 @@ async function loadTasksFromServer(){
 
       if (!start) continue; // nincs dátum → nem nyúlunk hozzá
 
-      if (today >= start && today <= end) {
-        // ma a tartományban van → ha még COMING, tegyük ACTIVE-ba
-        if (t.status === "coming") {
-          t.status = "active";
-        }
-      } else if (today < start) {
-        // ma a kezdés előtt van → ha ACTIVE, tegyük vissza COMING-ba
-        if (t.status === "active") {
-          t.status = "coming";
-        }
-      }
+      if (t.status !== "tracking" && today >= start && today <= end) {
+  if (t.status === "coming") {
+    t.status = "active";
+  }
+} else if (t.status !== "tracking" && today < start) {
+  if (t.status === "active") {
+    t.status = "coming";
+  }
+}
+
       // (OVERDUE logikát most direkt nem piszkáljuk)
     }
 
@@ -624,6 +637,8 @@ if (toggleCalBtn){
 if (allDayField){
   allDayField.addEventListener("change", () => toggleTimeInputs());
 }
+
+
 
 // --- Bootstrap -------------------------------------------------------------
 
