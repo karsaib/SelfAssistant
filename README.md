@@ -1,4 +1,4 @@
-Integrated Wiki (Markdown) inside the app
+<b>Integrated Wiki (Markdown) inside the app</b><br>
 Add a built-in Wiki module for lightweight documentation and notes.
 
 Goals
