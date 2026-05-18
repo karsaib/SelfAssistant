@@ -2,7 +2,7 @@
 <html lang="hu">
 <head>
   <meta charset="utf-8" />
-  <title>TaskManager — Kanban (COMING / ACTIVE / TRACKING / OVERDUE / DONE)</title>
+  <title>TaskManager — Kanban (COMING / ACTIVE / TRACKING)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&display=swap" rel="stylesheet">
 
@@ -30,8 +30,7 @@
     .col[data-status="coming"]  .col-header{ color:#0b7285; }
     .col[data-status="active"]  .col-header{ color:#b35c00; }
     .col[data-status="tracking"] .col-header{ color:#8b00b3; }
-    .col[data-status="overdue"] .col-header{ color:#a10000; }
-    .col[data-status="done"]    .col-header{ color:#2b8a3e; }
+   
 
     .col-list{
       padding:12px; display:flex; flex-direction:column; gap:12px; flex:1;
@@ -66,9 +65,27 @@
     .row{ display:grid; gap:.6rem; grid-template-columns:repeat(4,minmax(0,1fr)); }
     input,textarea{ padding:.55rem .7rem; border:1px solid var(--border); border-radius:.5rem; background:#fff; }
     textarea{ resize:vertical; min-height:84px; }
-    @media (max-width:1400px){ .board{ grid-template-columns: repeat(3, minmax(260px,1fr)); } }
-    @media (max-width:900px){ .board{ grid-template-columns: repeat(2, minmax(260px,1fr)); } }
-    @media (max-width:600px){ .board{ grid-template-columns: 1fr; } .row{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+ @media (max-width:1400px){
+  .board{
+    grid-template-columns: 35% 50% 15%;
+  }
+}
+
+@media (max-width:900px){
+  .board{
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width:600px){
+  .board{
+    grid-template-columns: 1fr;
+  }
+
+  .row{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}}
     @media (max-width:520px){ .row{ grid-template-columns:1fr; } }
 	/* Pastel color variants for cards */
 .card.color-red {
@@ -154,15 +171,9 @@
       <div class="col-list" id="col-tracking"></div>
     </div>
 
-    <div class="col" data-status="overdue">
-      <div class="col-title">OVERDUE</div>
-      <div class="col-list" id="col-overdue"></div>
-    </div>
+ 
 
-    <div class="col" data-status="done">
-      <div class="col-title">DONE</div>
-      <div class="col-list" id="col-done"></div>
-    </div>
+  
 
   </div>
 </section>

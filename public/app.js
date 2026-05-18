@@ -38,8 +38,7 @@ const gcalFrame       = document.getElementById("gcalFrame");
 const colComing   = document.getElementById("col-coming");
 const colActive   = document.getElementById("col-active");
 const colTracking = document.getElementById("col-tracking");
-const colOverdue  = document.getElementById("col-overdue");
-const colDone     = document.getElementById("col-done");
+
 
 // Form fields via form.elements (safer than getElementById where possible)
 const idField           = form ? form.elements["id"] : null;
@@ -176,13 +175,12 @@ function fmtTimeWindow(t) {
 // --- Rendering the board ---------------------------------------------------
 
 function render(){
-  const byStatus = {
-    coming:   colComing,
-    active:   colActive,
-    tracking: colTracking,
-    overdue:  colOverdue,
-    done:     colDone,
-  };
+const byStatus = {
+  coming:   colComing,
+  active:   colActive,
+  tracking: colTracking,
+  overdue:  colActive
+};
 
   // Clear all columns
   Object.values(byStatus).forEach(col => { if (col) col.innerHTML = ""; });
@@ -273,7 +271,17 @@ if (t.wikiRef){
     editBtn.addEventListener("click", () => openFormForEdit(t.id));
     actions.appendChild(editBtn);
 
-    const delBtn = document.createElement("button");
+   
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "btn";
+    closeBtn.type = "button";
+    closeBtn.textContent = "Close";
+    closeBtn.addEventListener("click", async () => {
+      await closeTask(t.id);
+    });
+    actions.appendChild(closeBtn);
+    
+     const delBtn = document.createElement("button");
     delBtn.className = "btn danger";
     delBtn.type = "button";
     delBtn.textContent = "X";
@@ -549,6 +557,27 @@ async function onSubmit(ev){
     alert("Unexpected error while saving task.");
   }
 }
+
+async function closeTask(id){
+  try{
+    const resp = await fetch(`/api/tasks/${encodeURIComponent(id)}/close`, {
+      method: "POST"
+    });
+
+    if (!resp.ok){
+      console.error(await resp.text());
+      alert("Close failed");
+      return;
+    }
+
+    await loadTasksFromServer();
+
+  }catch(err){
+    console.error(err);
+    alert("Close error");
+  }
+}
+
 
 // --- Delete task -----------------------------------------------------------
 

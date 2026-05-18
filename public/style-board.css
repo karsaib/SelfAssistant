@@ -1,12 +1,10 @@
 #board.board{
   display: grid;
-  grid-template-columns: 1fr 2fr 1fr 1fr 1fr; /* Active szélesebb */
+  grid-template-columns: 35% 50% 15%;
   gap: 14px;
   align-items: start;
   width: 100%;
 }
-
-
 
 #board.board > .col{
   border-radius: 16px;
@@ -14,7 +12,7 @@
   min-height: 70vh;
   position: relative;
   overflow-y: auto;
-max-height: 80vh;
+  max-height: 80vh;
 }
 
 /* Nálad .col-header van, nem .col-title */
@@ -127,8 +125,20 @@ max-height: 80vh;
 
 #board.board > .col[data-status="active"] > .col-list{
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+#board.board > .col[data-status="active"] > .col-list{
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#board.board > .col[data-status="active"] .card{
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* Active-ban a kártyák ne nyúljanak túl */
@@ -139,7 +149,7 @@ max-height: 80vh;
 
 /* Kicsit „cetlibb” hatás: kisebb magasság */
 #board.board > .col[data-status="active"] .card{
-  min-height: 90px;
+  height: auto;
 }
 
 /* ============================================================================
@@ -235,8 +245,23 @@ max-height: 80vh;
 }
 
 
+/* BACKLOG: 2 oszlopos cetlik */
 
-/* Reszponzív: ugyanaz, csak #board-ra */
-@media (max-width:1400px){ #board.board{ grid-template-columns: repeat(3, minmax(260px,1fr)); } }
-@media (max-width:900px){  #board.board{ grid-template-columns: repeat(2, minmax(260px,1fr)); } }
-@media (max-width:600px){  #board.board{ grid-template-columns: 1fr; } }
+#board.board > .col[data-status="coming"] > .col-list{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#board.board > .col[data-status="coming"] .card{
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  min-height: 160px;
+  box-sizing: border-box;
+}
+
