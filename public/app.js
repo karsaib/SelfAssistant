@@ -275,7 +275,7 @@ if (t.wikiRef){
     const closeBtn = document.createElement("button");
     closeBtn.className = "btn";
     closeBtn.type = "button";
-    closeBtn.textContent = "Close";
+    closeBtn.textContent = "Archive";
     closeBtn.addEventListener("click", async () => {
       await closeTask(t.id);
     });
@@ -351,6 +351,14 @@ const newStatus = (wrap && wrap.dataset.status) ? wrap.dataset.status : "coming"
 
       const patch = { status: newStatus };
 
+        if (newStatus === "coming") {
+          patch.allDay = false;
+          patch.startDate = null;
+          patch.startTime = null;
+          patch.endDate = null;
+          patch.endTime = null;
+          patch.due = null;
+        }
       // If moved into ACTIVE and the task has no dates, set today as all-day
       if (newStatus === "active" && !t.startDate && !t.startTime && !t.endDate && !t.endTime){
         const today = todayYMD();

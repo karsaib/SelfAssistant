@@ -312,6 +312,64 @@ if (slugFromHash) {
   }
 })();
   elMd.addEventListener("input", renderPreview);
+  
+  elMd.addEventListener("paste", async (e) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+
+      e.preventDefault();
+
+      const file = item.getAsFile();
+      if (!file) return;
+
+      setStatus("Uploading image...");
+
+      const formData = new FormData();
+      formData.append("file", file, "paste.png");
+
+      try {
+        const res = await fetch("/api/wiki-media", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!res.ok) {
+          setStatus("❌ Upload failed");
+          return;
+        }
+
+        const data = await res.json();
+
+        const md = `\n![image](${data.url})\n`;
+
+        const start = elMd.selectionStart;
+        const end   = elMd.selectionEnd;
+
+        elMd.value =
+          elMd.value.substring(0, start) +
+          md +
+          elMd.value.substring(end);
+
+        elMd.selectionStart =
+        elMd.selectionEnd =
+          start + md.length;
+
+        renderPreview();
+
+        setStatus("✅ Image inserted");
+      }
+      catch(err){
+        console.error(err);
+        setStatus("❌ Paste upload error");
+      }
+
+      return;
+    }
+  }
+});
 </script>
 </body>
 </html>

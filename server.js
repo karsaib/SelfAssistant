@@ -1,23 +1,29 @@
+//Node.js
+//Http,API
 import express from "express";
+// File, folder path mgmt
 import path from "path";
+//File handler
 import fs from "fs/promises";
+//Uri,path normalization
 import { fileURLToPath } from "url";
+//Environments
 import dotenv from "dotenv";
-// Fileupload module
+// Fileupload 
 import multer from "multer";
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
-
+//JSON data 
 const app = express();
 app.use(express.json());
 // Doc root settings
 const DOC_ROOT = process.env.DOC_ROOT || path.join(__dirname, "public", "DOC");
 app.use("/docs", express.static(DOC_ROOT));
 
-
+//Task storage
 const DATA_DIR   = process.env.DATA_DIR || path.join(__dirname, "public", "data");
 const TASKS_FILE = process.env.TASKS_FILE || path.join(DATA_DIR, "tasks.json");
 
@@ -68,6 +74,7 @@ function parseFrontmatter(md) {
 
   const block = m[1];
   const meta = {};
+  //Skip empty or comment rows
   for (const line of block.split("\n")) {
     const t = line.trim();
     if (!t || t.startsWith("#")) continue;
@@ -178,6 +185,7 @@ app.get("/api/wiki-pages", async (req, res) => {
 });
 
 // API:Get Slug
+//Slug is a user-friendly url
 app.get("/api/wiki/:slug", async (req, res) => {
   try {
     await fs.mkdir(WIKI_ROOT, { recursive: true });
@@ -285,7 +293,7 @@ app.get("/api/tasks", async (req, res) => {
   }
 });
 
-// API:Get tasks
+// API:Update task
 app.post("/api/tasks", async (req, res) => {
   try {
     const newTask = req.body || {};
@@ -361,7 +369,7 @@ app.delete("/api/tasks/:id", async (req, res) => {
   }
 });
 
-// API: Update task
+// API: Create task
 app.put("/api/tasks/:id", async (req, res) => {
   try {
     const reqId = String(req.params.id);
@@ -399,7 +407,7 @@ app.put("/api/tasks/:id", async (req, res) => {
   }
 });
 
-// API: 
+// API: Update task (PATCH)
 app.patch("/api/tasks/:id", async (req, res) => {
   try {
     const reqId = String(req.params.id);
@@ -422,14 +430,13 @@ if (patch.status == null) {
       tasks = [];
     }
 
-    // 2) task megkeresés
+    // Find task by ID
     const idx = tasks.findIndex(t => String(t.id) === reqId);
     if (idx < 0) return res.status(404).json({ error: "Task not found" });
 
     const prev = tasks[idx];
 
-    // 3) státusz normalizálás + kanonizálás
-    //    (itt állítsd be a kanonikus oszlop státuszokat, amiket a UI használ)
+
     const ALLOWED = new Set(["backlog", "coming", "tracking", "done", "active"]); // ha kell még, bővítsd
 
     let prevStatus = String(prev.status || "").toLowerCase().trim();
@@ -442,7 +449,7 @@ if (patch.status == null) {
 
 
 
-      // ha ismeretlen státuszt küld a kliens, inkább 400-at adjunk (ne csessze szét az adatot)
+      // Uknown status handling
       if (!ALLOWED.has(updated.status)) {
         return res.status(400).json({ error: `Invalid status: ${updated.status}` });
       }
@@ -453,13 +460,13 @@ if (patch.status == null) {
 const isTracking = (s) => s === "tracking";
 const now = Date.now();
 
-// START: ha NEM trackingből megy trackingbe -> mindig új session
+// START: if not tracking->tracking status it is NEW session
 if (!isTracking(prevStatus) && isTracking(nextStatus)) {
   updated.trackStart = new Date(now).toISOString(); // ✅ string, frontend szereti
   updated.trackedMs = 0;                            // ✅ session 0-ról
 }
 
-// HA már tracking, de nincs start (beragadt állapot) -> indítsd el
+// In tracking phase not started, force start
 if (isTracking(nextStatus) && !prev.trackStart) {
   updated.trackStart = new Date(now).toISOString();
   updated.trackedMs = 0;
@@ -469,8 +476,7 @@ if (isTracking(nextStatus) && !prev.trackStart) {
 
 
 
-// STOP: ha trackingből kikerül
-// STOP: ha trackingből kikerül
+// STOP counter if moving from tracking to non-tracking status
 if (isTracking(prevStatus) && !isTracking(nextStatus)) {
   const startRaw = prev.trackStart;
   const start = (typeof startRaw === "number")
@@ -504,7 +510,7 @@ if (isTracking(prevStatus) && !isTracking(nextStatus)) {
 
 
 
-    // 5) mentés
+    // Saving task
     tasks[idx] = updated;
     await fs.writeFile(TASKS_FILE, JSON.stringify(tasks, null, 2), "utf-8");
 
@@ -520,13 +526,14 @@ if (isTracking(prevStatus) && !isTracking(nextStatus)) {
 
 
 
-
+// Theres is no favicon
 app.get("/favicon.ico", (req, res) => res.status(204).end());
 
 
 const ARCHIVE_DIR =
   path.join(DATA_DIR, "archive");
 
+  //Close task,moving archive
 app.post("/api/tasks/:id/close", async (req, res) => {
   try {
 
