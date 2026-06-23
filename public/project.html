@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8" />
+  <title>Project View — TaskManager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style-project.css" />
+</head>
+<body>
+
+  <!-- Navigáció -->
+  <nav class="nav-bar">
+    <a href="/">🏠 Home</a>
+    <a href="/index.html">📋 Board</a>
+    <a href="/project.html" class="active">📊 Projects</a>
+    <a href="/sprints.html">📅 Sprints</a>
+    <a href="/wiki.html">📚 Wiki</a>
+    <a href="/doc.html">📁 Documents</a>
+  </nav>
+
+  <!-- Eszköztár -->
+  <div class="toolbar">
+    <div class="toolbar-header">
+      <h1>📊 Projects</h1>
+      <div class="toolbar-actions">
+        <a href="/sprints.html" class="btn">📅 Manage Sprints</a>
+        <button id="newRootBtn" class="btn primary">+ New Project</button>
+      </div>
+    </div>
+    <div class="toolbar-filters">
+      <input type="text" id="searchInput" placeholder="🔍 Search projects..." />
+      <div class="tag-filter" id="tagFilter">
+        <span class="filter-label">🏷️ Filter by tag:</span>
+        <!-- Dinamikusan generálva -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Projekt lista -->
+  <div id="projectList" class="project-list">
+    <div class="loading">Loading projects...</div>
+  </div>
+
+  <!-- Modal: Új root task -->
+  <div id="newRootModal" class="modal" style="display:none">
+    <div class="modal-content">
+      <h2>➕ New Project</h2>
+      <form id="newRootForm">
+        <label>
+          Project name *
+          <input type="text" id="rootTitle" required placeholder="e.g. Q4 Product Development" />
+        </label>
+        <label>
+          Tags (comma separated)
+          <input type="text" id="rootTags" placeholder="frontend, backend, design" />
+        </label>
+        <label>
+          Description
+          <textarea id="rootNotes" rows="3" placeholder="Brief description..."></textarea>
+        </label>
+        <label>
+          Sprint
+          <select id="rootSprintSelect">
+            <option value="">— none —</option>
+          </select>
+          <span class="muted">Assign project to a sprint.</span>
+        </label>
+        <div class="modal-actions">
+          <button type="submit" class="btn primary">Create</button>
+          <button type="button" class="btn" id="closeModalBtn">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/project.js"></script>
+</body>
+</html>

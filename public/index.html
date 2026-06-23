@@ -85,37 +85,69 @@
   .row{
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
-}}
+}
     @media (max-width:520px){ .row{ grid-template-columns:1fr; } }
-	/* Pastel color variants for cards */
-.card.color-red {
-  background:#ffe5e5;
-  border-color:#ffb3b3;
+	
+/* --- Type badge a kártyákon --- */
+.type-badge {
+  display: inline-block !important;
+  font-size: 0.6rem !important;
+  font-weight: 600 !important;
+  padding: 2px 10px !important;
+  border-radius: 12px !important;
+  margin-bottom: 6px !important;
+  letter-spacing: 0.3px !important;
+  text-transform: uppercase !important;
 }
 
-.card.color-yellow {
-  background:#fffbe6;  /* same as default card color */
-  border-color:#f5d97a;
+/* Root task badge - kiemeltebb */
+.type-badge.root {
+  color: #1e40af !important;
+  background: #dbeafe !important;
+  border: 1px solid #93c5fd !important;
 }
 
-.card.color-blue {
-  background:#e3f1ff;
-  border-color:#b5d4ff;
+/* Subtask badge - visszafogottabb */
+.type-badge.subtask {
+  color: #6b7280 !important;
+  background: #f3f4f6 !important;
+  border: 1px solid #d1d5db !important;
 }
 
-.card.color-green {
-  background:#e4f7e6;
-  border-color:#b4e3bc;
+/* Root kártyák szegélye - hogy kiemelkedjen */
+.card.root-card {
+  border-left: 4px solid #4a6cf7 !important;
+  border-top-left-radius: 4px !important;
+  border-bottom-left-radius: 4px !important;
 }
 
-.card.color-gray {
-  background:#f3f3f3;
-  border-color:#d0d0d0;
+/* Subtask kártyák - behúzva */
+.card.subtask-card {
+  margin-left: 12px !important;
+  border-left: 2px dashed #d1d5db !important;
+}
+/* --- Kártya cím --- */
+.card .title {
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  color: #1f1f1f !important;
+  display: inline !important;
+  word-break: break-word !important;
 }
 
-.card.color-orange {
-  background:#ffe9d6;
-  border-color:#ffcc9e;
+/* --- Type badge --- */
+.card .type-badge {
+  display: inline-block !important;
+  flex-shrink: 0 !important;
+}
+
+/* --- Header sor --- */
+.card .card-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin-bottom: 6px !important;
+  flex-wrap: wrap !important;
 }
 
   </style>
@@ -131,6 +163,8 @@
       <button id="toggleCalBtn" class="btn">Calendar</button>
       <button id="newBtn" class="btn">+ New</button>
       <button id="reportBtn" class="btn">Monthly report (CSV)</button>
+      <a href="/project.html" class="btn">📊 Project View</a>
+      <a href="/sprint-dashboard.html" class="btn">📊 Sprint Dashboard</a>
 
       <!-- Dokumentumtár ikon + gomb stílusban -->
       <a class="btn" href="doc.html" title="Dokumentumtár">
@@ -190,6 +224,12 @@
     <option value="">— none —</option>
   </select>
   <span class="muted">Task connected to wiki page (slug).</span>
+  <label>Sprint
+  <select name="sprintId" id="sprintSelect">
+    <option value="">— none —</option>
+  </select>
+  <span class="muted">Assign task to a sprint.</span>
+</label>
 </label>
       <div class="inline" style="gap:10px">
         <label class="inline" style="gap:6px"><input type="checkbox" name="allDay" id="allDayChk" /> All-day</label>
@@ -212,17 +252,7 @@
   <textarea name="timeLog" rows="3" placeholder="2025-11-14:01:30:00, 2025-11-14:00:45:00"></textarea>
   <span class="muted">Format (HH:MM:SS), comma separated.</span>
 </label>
-<label>Color
-  <select name="color">
-    <option value="yellow">Yellow (default)</option>
-    <option value="red">Red</option>
-    <option value="blue">Blue</option>
-    <option value="green">Green</option>
-    <option value="gray">Gray</option>
-    <option value="orange">Orange</option>
-  </select>
-  <span class="muted">Light pastel colors for better readability.</span>
-</label>
+
 
 
 <label class="inline" style="gap:6px"><input type="checkbox" name="done" /> Ready</label>

@@ -293,12 +293,11 @@ app.get("/api/tasks", async (req, res) => {
   }
 });
 
-// API:Update task
+/// API: Create task
 app.post("/api/tasks", async (req, res) => {
   try {
     const newTask = req.body || {};
 
-  
     let tasks = [];
     try {
       const raw = await fs.readFile(TASKS_FILE, "utf-8");
@@ -308,27 +307,40 @@ app.post("/api/tasks", async (req, res) => {
       tasks = [];
     }
 
-
     const maxId = tasks.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0);
     const id = maxId + 1;
 
-    // New task
+    // 🔥 Új task: alapértelmezett mezők + sprintId támogatás
     const task = {
       id,
       title: String(newTask.title || "New task"),
       status: String(newTask.status || "coming").toLowerCase(),
+      type: newTask.type || "root",
+      parentId: newTask.parentId || null,
+      sprintId: newTask.sprintId || null,  // 🔥 SPRINT ID TÁMOGATÁS
+      tags: newTask.tags || [],
+      notes: newTask.notes || "",
+      color: newTask.color || "yellow",
+      wikiRef: newTask.wikiRef || "",
       createdAt: new Date().toISOString(),
-      ...newTask,
-      id 
+      allDay: newTask.allDay || false,
+      startDate: newTask.startDate || null,
+      startTime: newTask.startTime || null,
+      endDate: newTask.endDate || null,
+      endTime: newTask.endTime || null,
+      done: newTask.done || false,
+      trackedMs: 0,
+      trackStart: null,
+      trackedMsTotal: 0,
+      timeLog: "",
     };
 
     tasks.push(task);
-
-    // Save
     await fs.writeFile(TASKS_FILE, JSON.stringify(tasks, null, 2), "utf-8");
 
     res.status(201).json(task);
   } catch (e) {
+    console.error("Task creation error:", e);
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
@@ -369,7 +381,7 @@ app.delete("/api/tasks/:id", async (req, res) => {
   }
 });
 
-// API: Create task
+// API: Update task (PUT)
 app.put("/api/tasks/:id", async (req, res) => {
   try {
     const reqId = String(req.params.id);
@@ -387,10 +399,13 @@ app.put("/api/tasks/:id", async (req, res) => {
     const idx = tasks.findIndex(t => String(t.id) === reqId);
     if (idx < 0) return res.status(404).json({ error: "Task not found" });
 
+    // 🔥 Frissítés: sprintId-t is kezeljük
     const updated = {
       ...tasks[idx],
       ...patch,
-      id: tasks[idx].id 
+      id: tasks[idx].id,
+      // Ha sprintId üres string, akkor null-ra állítjuk
+      sprintId: patch.sprintId || null,
     };
 
     if (updated.status) {
@@ -398,11 +413,11 @@ app.put("/api/tasks/:id", async (req, res) => {
     }
 
     tasks[idx] = updated;
-
     await fs.writeFile(TASKS_FILE, JSON.stringify(tasks, null, 2), "utf-8");
 
     res.json(updated);
   } catch (e) {
+    console.error("PUT error:", e);
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
@@ -603,5 +618,511 @@ app.post("/api/tasks/:id/close", async (req, res) => {
     res.status(500).json({
       error: String(e?.message || e)
     });
+  }
+});
+
+// GET /api/tasks/roots
+// → Visszaadja az összes root taskot (parentId = null)
+
+app.get("/api/tasks/roots", async (req, res) => {
+  try {
+    const tasks = await loadTasks();
+    const roots = tasks.filter(t => !t.parentId);
+    res.json(roots);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/tasks/:id/children
+// → Visszaadja egy task összes gyerekét
+
+app.get("/api/tasks/:id/children", async (req, res) => {
+  try {
+    const parentId = Number(req.params.id);
+    const tasks = await loadTasks();
+    const children = tasks.filter(t => t.parentId === parentId);
+    res.json(children);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- POST /api/tasks/:id/subtask - Új subtask létrehozása ---
+app.post("/api/tasks/:id/subtask", async (req, res) => {
+  try {
+    const parentId = Number(req.params.id);
+    
+    // 🔥 Betöltjük a taskokat a fájlból
+    let tasks = [];
+    try {
+      const raw = await fs.readFile(TASKS_FILE, "utf-8");
+      tasks = JSON.parse(raw || "[]");
+      if (!Array.isArray(tasks)) tasks = [];
+    } catch {
+      tasks = [];
+    }
+    
+    // Ellenőrizzük, hogy a szülő task létezik-e
+    const parent = tasks.find(t => t.id === parentId);
+    if (!parent) {
+      return res.status(404).json({ error: "Parent task not found" });
+    }
+
+    // Új ID generálása
+    const maxId = tasks.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0);
+    const id = maxId + 1;
+
+    const newTask = {
+      id: id,
+      title: String(req.body.title || "New subtask"),
+      type: "subtask",
+      parentId: parentId,
+      tags: req.body.tags || [],
+      status: String(req.body.status || "coming").toLowerCase(),
+      notes: req.body.notes || "",
+      color: req.body.color || "yellow",
+      wikiRef: req.body.wikiRef || "",
+      createdAt: new Date().toISOString(),
+      allDay: req.body.allDay || false,
+      startDate: req.body.startDate || null,
+      startTime: req.body.startTime || null,
+      endDate: req.body.endDate || null,
+      endTime: req.body.endTime || null,
+      done: req.body.done || false,
+      trackedMs: 0,
+      trackStart: null,
+      trackedMsTotal: 0,
+      timeLog: "",
+    };
+
+    tasks.push(newTask);
+    await fs.writeFile(TASKS_FILE, JSON.stringify(tasks, null, 2), "utf-8");
+    
+    res.status(201).json(newTask);
+  } catch (e) {
+    console.error("Subtask creation error:", e);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// PATCH /api/tasks/:id/link
+// → Task összekapcsolása (pl. subtask → root)
+
+app.patch("/api/tasks/:id/link", async (req, res) => {
+  try {
+    const taskId = Number(req.params.id);
+    const { parentId, tags } = req.body;
+    
+    const tasks = await loadTasks();
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return res.status(404).json({ error: "Task not found" });
+    
+    if (parentId !== undefined) task.parentId = parentId;
+    if (tags) task.tags = tags;
+    
+    await saveTasks(tasks);
+    res.json(task);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- PATCH /api/tasks/:id/tags - Task tag-ek frissítése ---
+app.patch("/api/tasks/:id/tags", async (req, res) => {
+  try {
+    const taskId = Number(req.params.id);
+    const { tags } = req.body;
+    
+    if (!Array.isArray(tags)) {
+      return res.status(400).json({ error: "tags must be an array" });
+    }
+
+    // 🔥 Betöltjük a taskokat
+    let tasks = [];
+    try {
+      const raw = await fs.readFile(TASKS_FILE, "utf-8");
+      tasks = JSON.parse(raw || "[]");
+      if (!Array.isArray(tasks)) tasks = [];
+    } catch {
+      tasks = [];
+    }
+
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+
+    task.tags = tags.filter(t => t && t.trim()).map(t => t.trim());
+    await fs.writeFile(TASKS_FILE, JSON.stringify(tasks, null, 2), "utf-8");
+    
+    res.json(task);
+  } catch (e) {
+    console.error("Update tags error:", e);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// ============================================================
+// 📊 PROJECT VIEW API - Root taskok és subtaskok kezelése
+// ============================================================
+
+// --- Segédfüggvények a taskok betöltéséhez/mentéséhez ---
+async function loadTasksFromFile() {
+  try {
+    const raw = await fs.readFile(TASKS_FILE, "utf-8");
+    const data = JSON.parse(raw || "[]");
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveTasksToFile(tasks) {
+  await fs.writeFile(TASKS_FILE, JSON.stringify(tasks, null, 2), "utf-8");
+}
+
+function getNextId(tasks) {
+  const maxId = tasks.reduce((m, t) => Math.max(m, Number(t.id) || 0), 0);
+  return maxId + 1;
+}
+
+// --- GET /api/tasks/roots - Root taskok lekérése ---
+app.get("/api/tasks/roots", async (req, res) => {
+  try {
+    const tasks = await loadTasksFromFile();
+    // Root taskok: nincs parentId-jük (vagy null/undefined)
+    const roots = tasks.filter(t => !t.parentId);
+    res.json(roots);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// --- GET /api/tasks/:id/children - Subtaskok lekérése ---
+app.get("/api/tasks/:id/children", async (req, res) => {
+  try {
+    const parentId = Number(req.params.id);
+    const tasks = await loadTasksFromFile();
+    const children = tasks.filter(t => t.parentId === parentId);
+    res.json(children);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// --- POST /api/tasks/:id/subtask - Új subtask létrehozása ---
+app.post("/api/tasks/:id/subtask", async (req, res) => {
+  try {
+    const parentId = Number(req.params.id);
+    const tasks = await loadTasksFromFile();
+    
+    // Ellenőrizzük, hogy a szülő task létezik-e
+    const parent = tasks.find(t => t.id === parentId);
+    if (!parent) {
+      return res.status(404).json({ error: "Parent task not found" });
+    }
+
+    const newTask = {
+      id: getNextId(tasks),
+      title: String(req.body.title || "New subtask"),
+      type: "subtask",
+      parentId: parentId,
+      tags: req.body.tags || [],
+      status: String(req.body.status || "coming").toLowerCase(),
+      notes: req.body.notes || "",
+      color: req.body.color || "yellow",
+      wikiRef: req.body.wikiRef || "",
+      createdAt: new Date().toISOString(),
+      // Opcionális mezők
+      allDay: req.body.allDay || false,
+      startDate: req.body.startDate || null,
+      startTime: req.body.startTime || null,
+      endDate: req.body.endDate || null,
+      endTime: req.body.endTime || null,
+      done: req.body.done || false,
+      trackedMs: 0,
+      trackStart: null,
+      trackedMsTotal: 0,
+      timeLog: "",
+    };
+
+    tasks.push(newTask);
+    await saveTasksToFile(tasks);
+    res.status(201).json(newTask);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// --- PATCH /api/tasks/:id/parent - Task áthelyezése másik szülő alá ---
+app.patch("/api/tasks/:id/parent", async (req, res) => {
+  try {
+    const taskId = Number(req.params.id);
+    const { parentId } = req.body;
+    
+    const tasks = await loadTasksFromFile();
+    const task = tasks.find(t => t.id === taskId);
+    
+    if (!task) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+
+    // Ha parentId = null, akkor root task lesz
+    // Ha parentId van, ellenőrizzük, hogy létezik-e
+    if (parentId !== null && parentId !== undefined) {
+      const parent = tasks.find(t => t.id === parentId);
+      if (!parent) {
+        return res.status(404).json({ error: "Parent task not found" });
+      }
+      // Nem lehet saját maga a szülő
+      if (parentId === taskId) {
+        return res.status(400).json({ error: "Task cannot be its own parent" });
+      }
+      task.type = "subtask";
+    } else {
+      task.type = "root";
+    }
+
+    task.parentId = parentId || null;
+    await saveTasksToFile(tasks);
+    res.json(task);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// --- GET /api/tags - Összes használt tag lekérése ---
+app.get("/api/tags", async (req, res) => {
+  try {
+    const tasks = await loadTasksFromFile();
+    const tagSet = new Set();
+    for (const t of tasks) {
+      if (t.tags && Array.isArray(t.tags)) {
+        for (const tag of t.tags) {
+          if (tag && tag.trim()) {
+            tagSet.add(tag.trim());
+          }
+        }
+      }
+    }
+    res.json([...tagSet].sort());
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// --- PATCH /api/tasks/:id/tags - Task tag-ek frissítése ---
+app.patch("/api/tasks/:id/tags", async (req, res) => {
+  try {
+    const taskId = Number(req.params.id);
+    const { tags } = req.body;
+    
+    if (!Array.isArray(tags)) {
+      return res.status(400).json({ error: "tags must be an array" });
+    }
+
+    const tasks = await loadTasksFromFile();
+    const task = tasks.find(t => t.id === taskId);
+    
+    if (!task) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+
+    task.tags = tags.filter(t => t && t.trim()).map(t => t.trim());
+    await saveTasksToFile(tasks);
+    res.json(task);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/// --- DELETE /api/tasks/:id/recursive - Task és összes gyerekének törlése ---
+app.delete("/api/tasks/:id/recursive", async (req, res) => {
+  try {
+    const taskId = Number(req.params.id);
+    
+    // 🔥 Betöltjük a taskokat
+    let tasks = [];
+    try {
+      const raw = await fs.readFile(TASKS_FILE, "utf-8");
+      tasks = JSON.parse(raw || "[]");
+      if (!Array.isArray(tasks)) tasks = [];
+    } catch {
+      tasks = [];
+    }
+    
+    // Rekurzívan összegyűjtjük az összes gyereket
+    function getAllChildIds(parentId) {
+      const children = tasks.filter(t => t.parentId === parentId);
+      let ids = children.map(c => c.id);
+      for (const child of children) {
+        ids = ids.concat(getAllChildIds(child.id));
+      }
+      return ids;
+    }
+
+    const childIds = getAllChildIds(taskId);
+    const idsToDelete = [taskId, ...childIds];
+    
+    tasks = tasks.filter(t => !idsToDelete.includes(t.id));
+    await fs.writeFile(TASKS_FILE, JSON.stringify(tasks, null, 2), "utf-8");
+    
+    res.status(204).end();
+  } catch (e) {
+    console.error("Delete recursive error:", e);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// --- GET /api/tasks/roots/with-children - Root taskok + subtaskok egyben ---
+app.get("/api/tasks/roots/with-children", async (req, res) => {
+  try {
+    const tasks = await loadTasksFromFile();
+    
+    // Root taskok
+    const roots = tasks.filter(t => !t.parentId);
+    
+    // Minden root-hoz hozzáadjuk a gyerekeket
+    const result = roots.map(root => ({
+      ...root,
+      children: tasks.filter(t => t.parentId === root.id)
+    }));
+    
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// A DATA_DIR mappában létrehozzuk a sprints.json fájlt
+const SPRINTS_FILE = process.env.SPRINTS_FILE || path.join(DATA_DIR, "sprints.json");
+
+// --- Segédfüggvények sprintekhez ---
+async function loadSprints() {
+  try {
+    const raw = await fs.readFile(SPRINTS_FILE, "utf-8");
+    const data = JSON.parse(raw || "[]");
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveSprints(sprints) {
+  await fs.writeFile(SPRINTS_FILE, JSON.stringify(sprints, null, 2), "utf-8");
+}
+
+function getNextSprintId(sprints) {
+  const maxId = sprints.reduce((m, s) => Math.max(m, Number(s.id) || 0), 0);
+  return maxId + 1;
+}
+
+// ============================================================
+// 📅 SPRINT API
+// ============================================================
+
+// --- GET /api/sprints - Összes sprint lekérése ---
+app.get("/api/sprints", async (req, res) => {
+  try {
+    const sprints = await loadSprints();
+    res.json(sprints);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// --- GET /api/sprints/active - Aktív sprint lekérése ---
+app.get("/api/sprints/active", async (req, res) => {
+  try {
+    const sprints = await loadSprints();
+    const active = sprints.find(s => s.status === "active");
+    res.json(active || null);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// --- POST /api/sprints - Új sprint létrehozása ---
+app.post("/api/sprints", async (req, res) => {
+  try {
+    const sprints = await loadSprints();
+    const newSprint = {
+      id: getNextSprintId(sprints),
+      name: String(req.body.name || "New Sprint"),
+      startDate: req.body.startDate || new Date().toISOString().slice(0, 10),
+      endDate: req.body.endDate || "",
+      status: String(req.body.status || "upcoming"), // upcoming | active | completed
+      goal: req.body.goal || "",
+      createdAt: new Date().toISOString(),
+    };
+    
+    sprints.push(newSprint);
+    await saveSprints(sprints);
+    res.status(201).json(newSprint);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// --- PUT /api/sprints/:id - Sprint frissítése ---
+app.put("/api/sprints/:id", async (req, res) => {
+  try {
+    const sprintId = Number(req.params.id);
+    const sprints = await loadSprints();
+    const idx = sprints.findIndex(s => s.id === sprintId);
+    
+    if (idx < 0) {
+      return res.status(404).json({ error: "Sprint not found" });
+    }
+    
+    const updated = {
+      ...sprints[idx],
+      ...req.body,
+      id: sprintId
+    };
+    
+    sprints[idx] = updated;
+    await saveSprints(sprints);
+    res.json(updated);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// --- DELETE /api/sprints/:id - Sprint törlése ---
+app.delete("/api/sprints/:id", async (req, res) => {
+  try {
+    const sprintId = Number(req.params.id);
+    const sprints = await loadSprints();
+    const filtered = sprints.filter(s => s.id !== sprintId);
+    
+    if (filtered.length === sprints.length) {
+      return res.status(404).json({ error: "Sprint not found" });
+    }
+    
+    await saveSprints(filtered);
+    res.status(204).end();
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// --- POST /api/sprints/:id/activate - Sprint aktiválása ---
+app.post("/api/sprints/:id/activate", async (req, res) => {
+  try {
+    const sprintId = Number(req.params.id);
+    let sprints = await loadSprints();
+    
+    // Minden sprintet inaktívvá teszünk
+    sprints = sprints.map(s => ({
+      ...s,
+      status: s.id === sprintId ? "active" : "upcoming"
+    }));
+    
+    await saveSprints(sprints);
+    res.json({ ok: true, activeSprintId: sprintId });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
   }
 });

@@ -1,0 +1,375 @@
+/* ============================================================
+   SPRINT DASHBOARD - Stílusok
+   ============================================================ */
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  background: #f5f6fb;
+  color: #1f1f1f;
+}
+
+/* --- Navigáció --- */
+.nav-bar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e1e4ec;
+  flex-wrap: wrap;
+}
+
+.nav-bar a {
+  text-decoration: none;
+  color: #4a5568;
+  font-weight: 500;
+  padding: 6px 16px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-size: 0.95rem;
+}
+
+.nav-bar a:hover {
+  background: #f0f2f5;
+}
+
+.nav-bar a.active {
+  background: #eef2ff;
+  color: #1f1f1f;
+  font-weight: 600;
+}
+
+/* --- Toolbar --- */
+.toolbar {
+  padding: 16px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e1e4ec;
+}
+
+.toolbar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.toolbar-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* --- Gombok --- */
+.btn {
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  font-weight: 500;
+  text-decoration: none;
+  color: #1f1f1f;
+}
+
+.btn:hover {
+  background: #f0f2f5;
+}
+
+.btn.primary {
+  background: #4a6cf7;
+  border-color: #4a6cf7;
+  color: white;
+}
+
+.btn.primary:hover {
+  background: #3b5de7;
+}
+
+/* --- Dashboard --- */
+#dashboardContainer {
+  padding: 20px 24px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.loading, .error, .no-active-sprint {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+}
+
+.error {
+  color: #ef4444;
+}
+
+.no-active-sprint a {
+  color: #4a6cf7;
+  text-decoration: none;
+}
+
+.no-active-sprint a:hover {
+  text-decoration: underline;
+}
+
+/* --- Sprint header --- */
+.sprint-header-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  border: 1px solid #e1e4ec;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.sprint-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.sprint-icon {
+  font-size: 1.5rem;
+}
+
+.sprint-name {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.sprint-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 12px;
+  border-radius: 12px;
+}
+
+.sprint-badge.active {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.sprint-meta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.sprint-goal {
+  background: #f8f9fa;
+  padding: 2px 12px;
+  border-radius: 8px;
+  color: #374151;
+}
+
+/* --- Statisztikák --- */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  border: 1px solid #e1e4ec;
+}
+
+.stat-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #1f1f1f;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+/* --- Progress bar --- */
+.progress-section {
+  background: white;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  border: 1px solid #e1e4ec;
+}
+
+.progress-bar-container {
+  height: 12px;
+  background: #f0f2f5;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.6s ease;
+}
+
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+
+/* --- Státusz bontás --- */
+.status-breakdown {
+  background: white;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  border: 1px solid #e1e4ec;
+}
+
+.status-breakdown h3 {
+  margin: 0 0 12px 0;
+  font-size: 1rem;
+}
+
+.status-bar-item {
+  margin-bottom: 8px;
+}
+
+.status-bar-item:last-child {
+  margin-bottom: 0;
+}
+
+.status-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #4a5568;
+  margin-bottom: 2px;
+}
+
+.status-bar-track {
+  height: 8px;
+  background: #f0f2f5;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.status-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+/* --- Task lista --- */
+.task-list-section {
+  background: white;
+  border-radius: 12px;
+  padding: 16px 20px;
+  border: 1px solid #e1e4ec;
+}
+
+.task-list-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 1rem;
+}
+
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.task-item:hover {
+  background: #f8f9fa;
+}
+
+.task-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.task-status-dot.status-coming { background: #94a3b8; }
+.task-status-dot.status-active { background: #f59e0b; }
+.task-status-dot.status-tracking { background: #8b5cf6; }
+.task-status-dot.status-done { background: #22c55e; }
+.task-status-dot.status-archived { background: #9ca3af; }
+
+.task-title {
+  flex: 1;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.task-type {
+  font-size: 0.8rem;
+}
+
+.task-status-label {
+  font-size: 0.7rem;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.task-link {
+  font-size: 0.7rem;
+  padding: 2px 10px;
+  border-radius: 4px;
+  background: #eef2ff;
+  color: #4a6cf7;
+  text-decoration: none;
+}
+
+.task-link:hover {
+  background: #dbeafe;
+}
+
+.empty {
+  color: #9ca3af;
+  font-style: italic;
+  padding: 12px 0;
+}
+
+/* --- Reszponzivitás --- */
+@media (max-width: 600px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .task-item {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  
+  .task-status-label {
+    margin-left: 20px;
+  }
+}

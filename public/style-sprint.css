@@ -1,0 +1,413 @@
+/* ============================================================
+   SPRINT MANAGEMENT - Stílusok
+   ============================================================ */
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  background: #f5f6fb;
+  color: #1f1f1f;
+}
+
+/* --- Navigáció --- */
+.nav-bar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e1e4ec;
+  flex-wrap: wrap;
+}
+
+.nav-bar a {
+  text-decoration: none;
+  color: #4a5568;
+  font-weight: 500;
+  padding: 6px 16px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-size: 0.95rem;
+}
+
+.nav-bar a:hover {
+  background: #f0f2f5;
+}
+
+.nav-bar a.active {
+  background: #eef2ff;
+  color: #1f1f1f;
+  font-weight: 600;
+}
+
+/* --- Toolbar --- */
+.toolbar {
+  padding: 16px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e1e4ec;
+}
+
+.toolbar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.toolbar-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* --- Gombok --- */
+.btn {
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.btn:hover {
+  background: #f0f2f5;
+}
+
+.btn.primary {
+  background: #4a6cf7;
+  border-color: #4a6cf7;
+  color: white;
+}
+
+.btn.primary:hover {
+  background: #3b5de7;
+}
+
+.btn.danger {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.btn.danger:hover {
+  background: #fef2f2;
+}
+
+/* --- Sprint lista --- */
+.sprint-list {
+  padding: 20px 24px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.loading {
+  text-align: center;
+  color: #6b7280;
+  padding: 40px;
+  font-size: 1.1rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+}
+
+.empty-state p {
+  margin: 8px 0;
+}
+
+.empty-state .muted {
+  font-size: 0.9rem;
+  color: #9ca3af;
+}
+
+/* --- Sprint item --- */
+.sprint-item {
+  background: white;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  border: 1px solid #e1e4ec;
+  transition: all 0.2s;
+}
+
+.sprint-item:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.sprint-item.active {
+  border-left: 4px solid #22c55e;
+}
+
+.sprint-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sprint-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sprint-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.sprint-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 12px;
+  border-radius: 12px;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.sprint-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.sprint-actions .btn {
+  padding: 4px 12px;
+  font-size: 0.8rem;
+}
+
+.sprint-dates {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-top: 6px;
+}
+
+.sprint-goal {
+  font-size: 0.9rem;
+  color: #374151;
+  margin-top: 4px;
+  padding: 4px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+/* --- Modal --- */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  padding: 28px 32px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  font-size: 1.3rem;
+}
+
+.modal-content label {
+  display: block;
+  margin-bottom: 16px;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.modal-content input,
+.modal-content select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  margin-top: 4px;
+  font-family: inherit;
+}
+
+.modal-content input:focus,
+.modal-content select:focus {
+  outline: none;
+  border-color: #4a6cf7;
+}
+
+.modal-content .row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.modal-actions .btn {
+  flex: 1;
+}
+
+/* --- Reszponzivitás --- */
+@media (max-width: 600px) {
+  .sprint-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .sprint-actions {
+    margin-top: 8px;
+  }
+  
+  .modal-content .row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   CURRENT TASK CARD
+   ============================================================ */
+
+.current-task-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  border: 1px solid #e1e4ec;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.current-task-card.no-task {
+  background: #fafafa;
+  border-color: #e5e7eb;
+}
+
+.current-task-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.current-task-icon {
+  font-size: 1.2rem;
+}
+
+.current-task-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.current-task-content {
+  background: #f0fdf4;
+  border-radius: 8px;
+  padding: 12px 16px;
+  border: 1px solid #bbf7d0;
+}
+
+.current-task-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.current-task-title .task-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.current-task-title .task-type-badge {
+  font-size: 0.6rem;
+  font-weight: 500;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.current-task-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.current-task-meta .task-status-label {
+  font-size: 0.7rem;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.current-task-meta .task-tag {
+  font-size: 0.7rem;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.current-task-empty {
+  color: #6b7280;
+  padding: 8px 0;
+}
+
+.current-task-empty p {
+  margin: 4px 0;
+}
+
+.current-task-empty .muted {
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
+/* --- Task lista kiemelés --- */
+.task-item.current {
+  background: #f0fdf4 !important;
+  border-left: 3px solid #22c55e;
+  border-radius: 4px;
+}
+
+.current-badge {
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: #dcfce7;
+  color: #15803d;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}

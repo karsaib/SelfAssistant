@@ -1,0 +1,543 @@
+/* ============================================================
+   PROJECT VIEW - Stílusok
+   ============================================================ */
+
+/* --- Reset / Alapok --- */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  background: #f5f6fb;
+  color: #1f1f1f;
+}
+
+/* --- Navigáció --- */
+.nav-bar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e1e4ec;
+  flex-wrap: wrap;
+}
+
+.nav-bar a {
+  text-decoration: none;
+  color: #4a5568;
+  font-weight: 500;
+  padding: 6px 16px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-size: 0.95rem;
+}
+
+.nav-bar a:hover {
+  background: #f0f2f5;
+}
+
+.nav-bar a.active {
+  background: #eef2ff;
+  color: #1f1f1f;
+  font-weight: 600;
+}
+
+/* --- Toolbar --- */
+.toolbar {
+  padding: 16px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e1e4ec;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.toolbar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.toolbar-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.toolbar-filters {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+#searchInput {
+  padding: 8px 14px;
+  border: 1px solid #e1e4ec;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  min-width: 200px;
+  background: #f8f9fa;
+  transition: border-color 0.2s;
+}
+
+#searchInput:focus {
+  outline: none;
+  border-color: #4a6cf7;
+  background: white;
+}
+
+.tag-filter {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-label {
+  font-size: 0.9rem;
+  color: #4a5568;
+  margin-right: 4px;
+}
+
+.tag-option {
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid #d1d5db;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+  background: white;
+  color: #4a5568;
+  user-select: none;
+}
+
+.tag-option:hover {
+  background: #f0f2f5;
+}
+
+.tag-option.active {
+  background: #4a6cf7;
+  color: white;
+  border-color: #4a6cf7;
+}
+
+/* --- Gombok --- */
+.btn {
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.btn:hover {
+  background: #f0f2f5;
+}
+
+.btn.primary {
+  background: #4a6cf7;
+  border-color: #4a6cf7;
+  color: white;
+}
+
+.btn.primary:hover {
+  background: #3b5de7;
+}
+
+.btn.danger {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.btn.danger:hover {
+  background: #fef2f2;
+}
+
+/* --- Projekt lista --- */
+.project-list {
+  padding: 20px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.loading {
+  text-align: center;
+  color: #6b7280;
+  padding: 40px;
+  font-size: 1.1rem;
+}
+
+/* --- Root kártya --- */
+.root-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  border: 1px solid #e1e4ec;
+  transition: box-shadow 0.2s;
+}
+
+.root-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.root-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  gap: 12px;
+}
+
+.root-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.toggle-icon {
+  transition: transform 0.25s ease;
+  font-size: 0.8rem;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.toggle-icon.collapsed {
+  transform: rotate(-90deg);
+}
+
+.root-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.root-badge {
+  font-size: 0.75rem;
+  background: #eef2ff;
+  color: #4a6cf7;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.root-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.root-actions .btn {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  border-radius: 6px;
+}
+
+/* --- Root meta --- */
+.root-meta {
+  display: flex;
+  gap: 12px;
+  margin: 8px 0 0 32px;
+  flex-wrap: wrap;
+}
+
+.root-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.root-tags .tag {
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  background: #f3f4f6;
+  color: #4a5568;
+  border: 1px solid #e1e4ec;
+}
+
+.root-notes {
+  color: #6b7280;
+  font-size: 0.9rem;
+  margin: 4px 0 0 32px;
+}
+
+/* --- Subtask lista --- */
+.subtask-list {
+  margin-top: 12px;
+  padding-left: 32px;
+  border-left: 2px solid #e1e4ec;
+}
+
+.subtask-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: background 0.15s;
+  margin-bottom: 2px;
+}
+
+.subtask-item:hover {
+  background: #f8f9fa;
+}
+
+.subtask-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.subtask-status.status-coming { background: #94a3b8; }
+.subtask-status.status-active { background: #f59e0b; }
+.subtask-status.status-tracking { background: #8b5cf6; }
+.subtask-status.status-done { background: #22c55e; }
+.subtask-status.status-archived { background: #9ca3af; }
+
+.subtask-title {
+  font-size: 0.95rem;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.subtask-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.subtask-tags .mini-tag {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  color: #4a5568;
+}
+
+.subtask-links {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.subtask-links a {
+  text-decoration: none;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #f1f3f5;
+  color: #4a6cf7;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.subtask-links a:hover {
+  background: #e1e4ec;
+}
+
+.subtask-links .wiki-link {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.subtask-links .wiki-link:hover {
+  background: #dcfce7;
+}
+
+.subtask-links .board-link {
+  background: #eef2ff;
+  color: #4a6cf7;
+}
+
+.subtask-links .board-link:hover {
+  background: #dbeafe;
+}
+
+/* --- Add subtask --- */
+.add-subtask {
+  margin: 8px 0 4px 0;
+  padding-left: 20px;
+}
+
+.add-subtask input {
+  width: 100%;
+  padding: 6px 12px;
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: transparent;
+  transition: all 0.2s;
+}
+
+.add-subtask input:focus {
+  outline: none;
+  border-color: #4a6cf7;
+  border-style: solid;
+  background: white;
+}
+
+.add-subtask input::placeholder {
+  color: #9ca3af;
+}
+
+/* --- Modal --- */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  padding: 28px 32px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  font-size: 1.3rem;
+}
+
+.modal-content label {
+  display: block;
+  margin-bottom: 16px;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.modal-content input,
+.modal-content textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  margin-top: 4px;
+  font-family: inherit;
+}
+
+.modal-content input:focus,
+.modal-content textarea:focus {
+  outline: none;
+  border-color: #4a6cf7;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.modal-actions .btn {
+  flex: 1;
+}
+
+/* --- Reszponzivitás --- */
+@media (max-width: 768px) {
+  .toolbar-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .toolbar-actions {
+    justify-content: stretch;
+  }
+  
+  .toolbar-actions .btn {
+    width: 100%;
+  }
+  
+  .toolbar-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  #searchInput {
+    width: 100%;
+  }
+  
+  .subtask-item {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  
+  .subtask-links {
+    margin-left: 20px;
+  }
+  
+  .root-header {
+    flex-wrap: wrap;
+  }
+  
+  .root-actions {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .nav-bar {
+    padding: 8px 12px;
+    gap: 4px;
+  }
+  
+  .nav-bar a {
+    padding: 4px 10px;
+    font-size: 0.8rem;
+  }
+  
+  .root-card {
+    padding: 12px 14px;
+  }
+  
+  .subtask-list {
+    padding-left: 16px;
+  }
+  
+  .modal-content {
+    padding: 20px;
+  }
+  
+}
+
+/* --- Sprint badge a Project View-ban --- */
+.sprint-badge {
+  display: inline-block !important;
+  padding: 2px 10px !important;
+  border-radius: 12px !important;
+  font-size: 0.65rem !important;
+  background: #f0fdf4 !important;
+  border: 1px solid #bbf7d0 !important;
+  color: #15803d !important;
+  margin-left: 8px !important;
+  font-weight: 500 !important;
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8" />
+  <title>Sprint Dashboard — TaskManager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/style-sprint-dashboard.css" />
+</head>
+<body>
+
+  <!-- Navigáció -->
+  <nav class="nav-bar">
+    <a href="/">🏠 Home</a>
+    <a href="/index.html">📋 Board</a>
+    <a href="/project.html">📊 Projects</a>
+    <a href="/sprints.html">📅 Sprints</a>
+    <a href="/sprint-dashboard.html" class="active">📊 Sprint Dashboard</a>
+    <a href="/wiki.html">📚 Wiki</a>
+    <a href="/doc.html">📁 Documents</a>
+  </nav>
+
+  <!-- Eszköztár -->
+  <div class="toolbar">
+    <div class="toolbar-header">
+      <h1>📊 Sprint Dashboard</h1>
+      <div class="toolbar-actions">
+        <button id="refreshBtn" class="btn">🔄 Refresh</button>
+        <a href="/sprints.html" class="btn">📅 Manage Sprints</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sprint Dashboard -->
+  <div id="dashboardContainer">
+    <div class="loading">Loading sprint data...</div>
+  </div>
+
+  <script src="/sprint-dashboard.js"></script>
+</body>
+</html>
