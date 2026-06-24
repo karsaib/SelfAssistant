@@ -1,0 +1,254 @@
+/* ============================================================
+   TIMELINE - Stílusok
+   ============================================================ */
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  background: #f5f6fb;
+  color: #1f1f1f;
+}
+
+/* --- Navigáció --- */
+.nav-bar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e1e4ec;
+  flex-wrap: wrap;
+}
+
+.nav-bar a {
+  text-decoration: none;
+  color: #4a5568;
+  font-weight: 500;
+  padding: 6px 16px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-size: 0.95rem;
+}
+
+.nav-bar a:hover { background: #f0f2f5; }
+.nav-bar a.active { background: #eef2ff; color: #1f1f1f; font-weight: 600; }
+
+/* --- Toolbar --- */
+.toolbar {
+  padding: 16px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e1e4ec;
+}
+
+.toolbar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.toolbar-header h1 { margin: 0; font-size: 1.5rem; font-weight: 600; }
+.toolbar-actions { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+
+.btn {
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.btn:hover { background: #f0f2f5; }
+
+/* --- Timeline --- */
+#timelineContainer {
+  padding: 20px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.loading, .error, .empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+}
+
+.error { color: #ef4444; }
+.empty .muted { font-size: 0.9rem; color: #9ca3af; }
+
+/* --- Timeline grid --- */
+.timeline-controls {
+  margin-bottom: 16px;
+}
+
+.date-range {
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.timeline-grid {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e1e4ec;
+  overflow: hidden;
+}
+
+.timeline-header {
+  display: flex;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e1e4ec;
+  padding: 8px 0;
+}
+
+.task-name-header {
+  width: 300px;
+  min-width: 200px;
+  padding: 0 12px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.timeline-dates {
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  gap: 1px;
+}
+
+.timeline-date {
+  flex: 1;
+  min-width: 32px;
+  text-align: center;
+  font-size: 0.7rem;
+  color: #6b7280;
+  padding: 2px 0;
+  border-left: 1px solid #f0f2f5;
+}
+
+.timeline-date.today {
+  background: #eef2ff;
+  font-weight: 700;
+  color: #4a6cf7;
+  border-radius: 4px;
+}
+
+.month-label {
+  display: block;
+  font-size: 0.55rem;
+  color: #9ca3af;
+}
+
+/* --- Timeline rows --- */
+.timeline-row {
+  display: flex;
+  border-bottom: 1px solid #f0f2f5;
+  padding: 6px 0;
+  transition: background 0.2s;
+}
+
+.timeline-row:hover { background: #f8f9fa; }
+.timeline-row.overdue { background: #fef2f2; }
+.timeline-row.root-row { background: #f8faff; }
+.timeline-row.subtask-row { opacity: 0.9; }
+
+.task-info {
+  width: 300px;
+  min-width: 200px;
+  padding: 0 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.task-title {
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.overdue-badge {
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: #ef4444;
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+.priority-badge {
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: white;
+}
+
+.task-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.65rem;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.task-status { font-weight: 500; }
+.task-parent { color: #9ca3af; }
+.task-date { color: #9ca3af; }
+
+/* --- Timeline bar --- */
+.timeline-bar-container {
+  flex: 1;
+  position: relative;
+  padding: 4px 0;
+  min-height: 32px;
+  overflow: visible;
+}
+
+.timeline-bar {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 4px;
+  min-width: 4px;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  transition: all 0.3s ease;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.timeline-bar:hover {
+  opacity: 0.9;
+  transform: translateY(-50%) scaleY(1.1);
+}
+
+.bar-label {
+  font-size: 0.55rem;
+  color: white;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* --- Reszponzivitás --- */
+@media (max-width: 768px) {
+  .task-info { width: 150px; min-width: 120px; }
+  .task-name-header { width: 150px; min-width: 120px; }
+  .bar-label { display: none; }
+}

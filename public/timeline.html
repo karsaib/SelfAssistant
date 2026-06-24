@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8" />
+  <title>Timeline — TaskManager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/style-timeline.css" />
+</head>
+<body>
+
+  <!-- Navigáció -->
+  <nav class="nav-bar">
+    <a href="/">🏠 Home</a>
+    <a href="/index.html">📋 Board</a>
+    <a href="/project.html">📊 Projects</a>
+    <a href="/sprints.html">📅 Sprints</a>
+    <a href="/sprint-dashboard.html">📊 Sprint Dashboard</a>
+    <a href="/timeline.html" class="active">📈 Timeline</a>
+    <a href="/wiki.html">📚 Wiki</a>
+  </nav>
+
+  <!-- Eszköztár -->
+  <div class="toolbar">
+    <div class="toolbar-header">
+      <h1>📈 Timeline</h1>
+      <div class="toolbar-actions">
+        <button id="refreshBtn" class="btn">🔄 Refresh</button>
+        <label>
+          <input type="checkbox" id="showOverdueOnly" /> Show overdue only
+        </label>
+        <label>
+          <input type="checkbox" id="showCompleted" /> Show completed
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline konténer -->
+  <div id="timelineContainer">
+    <div class="loading">Loading timeline...</div>
+  </div>
+
+  <script src="/timeline.js"></script>
+</body>
+</html>

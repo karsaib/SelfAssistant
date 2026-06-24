@@ -422,18 +422,17 @@ app.put("/api/tasks/:id", async (req, res) => {
   }
 });
 
-// API: Update task (PATCH)
+// ============================================================
+// 🔥 API: Update task (PATCH) - JAVÍTOTT VERZIÓ
+// ============================================================
 app.patch("/api/tasks/:id", async (req, res) => {
   try {
     const reqId = String(req.params.id);
     const patch = req.body || {};
-	
 
-
-if (patch.status == null) {
-  return res.status(400).json({ error: "Missing status in PATCH body" });
-}
-
+    if (patch.status == null) {
+      return res.status(400).json({ error: "Missing status in PATCH body" });
+    }
 
     // Read task
     let tasks = [];
@@ -451,20 +450,16 @@ if (patch.status == null) {
 
     const prev = tasks[idx];
 
-
-    const ALLOWED = new Set(["backlog", "coming", "tracking", "done", "active"]); // ha kell még, bővítsd
+    const ALLOWED = new Set(["backlog", "coming", "tracking", "done", "active"]);
 
     let prevStatus = String(prev.status || "").toLowerCase().trim();
-  
 
     const updated = { ...prev, ...patch, id: prev.id };
 
     if (updated.status != null) {
       updated.status = String(updated.status).toLowerCase().trim();
 
-
-
-      // Uknown status handling
+      // Unknown status handling
       if (!ALLOWED.has(updated.status)) {
         return res.status(400).json({ error: `Invalid status: ${updated.status}` });
       }
@@ -472,64 +467,60 @@ if (patch.status == null) {
 
     const nextStatus = String(updated.status || prevStatus).toLowerCase().trim();
 
-const isTracking = (s) => s === "tracking";
-const now = Date.now();
+    const isTracking = (s) => s === "tracking";
+    const now = Date.now();
 
-// START: if not tracking->tracking status it is NEW session
-if (!isTracking(prevStatus) && isTracking(nextStatus)) {
-  updated.trackStart = new Date(now).toISOString(); // ✅ string, frontend szereti
-  updated.trackedMs = 0;                            // ✅ session 0-ról
-}
+    // START: if not tracking -> tracking status it is NEW session
+    if (!isTracking(prevStatus) && isTracking(nextStatus)) {
+      updated.trackStart = new Date(now).toISOString();
+      updated.trackedMs = 0;
+    }
 
-// In tracking phase not started, force start
-if (isTracking(nextStatus) && !prev.trackStart) {
-  updated.trackStart = new Date(now).toISOString();
-  updated.trackedMs = 0;
-}
+    // In tracking phase not started, force start
+    if (isTracking(nextStatus) && !prev.trackStart) {
+      updated.trackStart = new Date(now).toISOString();
+      updated.trackedMs = 0;
+    }
 
+    // STOP counter if moving from tracking to non-tracking status
+    if (isTracking(prevStatus) && !isTracking(nextStatus)) {
+      const startRaw = prev.trackStart;
+      const start = (typeof startRaw === "number")
+        ? startRaw
+        : Date.parse(startRaw);
 
+      if (Number.isFinite(start) && start > 0) {
+        const deltaMs = Math.max(0, now - start);
 
+        const stamp = new Date(now).toISOString().slice(0, 19).replace("T", " ");
+        const entry = `${stamp} +${formatHMS(deltaMs)}`;
 
+        const prevLog = String(prev.timeLog || "").trim();
+        updated.timeLog = prevLog ? (prevLog + ", " + entry) : entry;
 
-// STOP counter if moving from tracking to non-tracking status
-if (isTracking(prevStatus) && !isTracking(nextStatus)) {
-  const startRaw = prev.trackStart;
-  const start = (typeof startRaw === "number")
-    ? startRaw
-    : Date.parse(startRaw);
+        updated.trackedMsTotal = Number(prev.trackedMsTotal ?? 0) + deltaMs;
 
-  if (Number.isFinite(start) && start > 0) {
-    const deltaMs = Math.max(0, now - start);
+        updated.trackedMs = 0;
+        updated.trackStart = null;
 
-    const stamp = new Date(now).toISOString().slice(0, 19).replace("T", " ");
-    const entry = `${stamp} +${formatHMS(deltaMs)}`;
+        console.log("[STOP OK]", reqId, { entry });
+      } else {
+        updated.trackStart = null;
+        updated.trackedMs = 0;
+      }
+    }
 
-    const prevLog = String(prev.timeLog || "").trim();
-    updated.timeLog = prevLog ? (prevLog + ", " + entry) : entry;
-
-    updated.trackedMsTotal = Number(prev.trackedMsTotal ?? 0) + deltaMs;
-
-    updated.trackedMs = 0;
-    updated.trackStart = null;
-
-    console.log("[STOP OK]", reqId, { entry });
-  } else {
-    updated.trackStart = null;
-    updated.trackedMs = 0;
-  }
-}
-
-
-
-
-
-
+    // 🔥 HA DONE, AKKOR TISZTÍTSUK A TRACKING ADATOKAT (DE AZ ÖSSZESÍTETT IDŐ MARAD)
+    if (nextStatus === "done") {
+      updated.trackStart = null;
+      updated.trackedMs = 0;
+      // trackedMsTotal MEGMARAD (összesített idő)
+    }
 
     // Saving task
     tasks[idx] = updated;
     await fs.writeFile(TASKS_FILE, JSON.stringify(tasks, null, 2), "utf-8");
 
- 
     return res.json(updated);
 
   } catch (e) {
@@ -538,115 +529,8 @@ if (isTracking(prevStatus) && !isTracking(nextStatus)) {
   }
 });
 
-
-
-
 // Theres is no favicon
 app.get("/favicon.ico", (req, res) => res.status(204).end());
-
-
-const ARCHIVE_DIR =
-  path.join(DATA_DIR, "archive");
-
-  //Close task,moving archive
-app.post("/api/tasks/:id/close", async (req, res) => {
-  try {
-
-    await fs.mkdir(ARCHIVE_DIR, { recursive: true });
-
-    const reqId = String(req.params.id);
-
-    let tasks = [];
-
-    try {
-      const raw = await fs.readFile(TASKS_FILE, "utf-8");
-      tasks = JSON.parse(raw || "[]");
-
-      if (!Array.isArray(tasks)) {
-        tasks = [];
-      }
-
-    } catch {
-      tasks = [];
-    }
-
-    const idx =
-      tasks.findIndex(t => String(t.id) === reqId);
-
-    if (idx < 0) {
-      return res.status(404).json({
-        error: "Task not found"
-      });
-    }
-
-    const task = tasks[idx];
-
-    task.closedAt =
-      new Date().toISOString();
-
-    task.status = "archived";
-
-    const fileName =
-      `${task.id}_${Date.now()}.json`;
-
-    const archivePath =
-      path.join(ARCHIVE_DIR, fileName);
-
-    await fs.writeFile(
-      archivePath,
-      JSON.stringify(task, null, 2),
-      "utf-8"
-    );
-
-    tasks.splice(idx, 1);
-
-    await fs.writeFile(
-      TASKS_FILE,
-      JSON.stringify(tasks, null, 2),
-      "utf-8"
-    );
-
-    res.json({
-      ok: true,
-      archived: fileName
-    });
-
-  } catch (e) {
-
-    console.error(e);
-
-    res.status(500).json({
-      error: String(e?.message || e)
-    });
-  }
-});
-
-// GET /api/tasks/roots
-// → Visszaadja az összes root taskot (parentId = null)
-
-app.get("/api/tasks/roots", async (req, res) => {
-  try {
-    const tasks = await loadTasks();
-    const roots = tasks.filter(t => !t.parentId);
-    res.json(roots);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// GET /api/tasks/:id/children
-// → Visszaadja egy task összes gyerekét
-
-app.get("/api/tasks/:id/children", async (req, res) => {
-  try {
-    const parentId = Number(req.params.id);
-    const tasks = await loadTasks();
-    const children = tasks.filter(t => t.parentId === parentId);
-    res.json(children);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
 
 // --- POST /api/tasks/:id/subtask - Új subtask létrehozása ---
 app.post("/api/tasks/:id/subtask", async (req, res) => {
@@ -1103,25 +987,6 @@ app.delete("/api/sprints/:id", async (req, res) => {
     
     await saveSprints(filtered);
     res.status(204).end();
-  } catch (e) {
-    res.status(500).json({ error: String(e?.message || e) });
-  }
-});
-
-// --- POST /api/sprints/:id/activate - Sprint aktiválása ---
-app.post("/api/sprints/:id/activate", async (req, res) => {
-  try {
-    const sprintId = Number(req.params.id);
-    let sprints = await loadSprints();
-    
-    // Minden sprintet inaktívvá teszünk
-    sprints = sprints.map(s => ({
-      ...s,
-      status: s.id === sprintId ? "active" : "upcoming"
-    }));
-    
-    await saveSprints(sprints);
-    res.json({ ok: true, activeSprintId: sprintId });
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
   }

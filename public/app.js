@@ -235,6 +235,9 @@ function render() {
   Object.values(byStatus).forEach(col => { if (col) col.innerHTML = ""; });
 
   for (const t of tasks) {
+    // 🔥 HA DONE, SKIPPELJÜK (ne jelenjen meg a Board-on)
+    if (t.status === "done") continue;
+    
     const col = byStatus[t.status] || colComing;
     if (!col) continue;
 
@@ -414,28 +417,28 @@ function render() {
       card.appendChild(wiki);
     }
 
-if (t.sprintId) {
-  // 🔥 Mindkettőt számmá alakítjuk (string → number)
-  const sprintId = Number(t.sprintId);
-  const sprint = sprints.find(s => Number(s.id) === sprintId);
-  
-  if (sprint) {
-    const sprintEl = document.createElement("div");
-    sprintEl.className = "sprint-tag";
-    sprintEl.textContent = `📅 ${sprint.name}`;
-    sprintEl.style.cssText = `
-      display: inline-block !important;
-      margin-top: 4px !important;
-      padding: 2px 10px !important;
-      border-radius: 12px !important;
-      font-size: 0.65rem !important;
-      background: #f0fdf4 !important;
-      border: 1px solid #bbf7d0 !important;
-      color: #15803d !important;
-    `;
-    card.appendChild(sprintEl);
-  }
-}
+    // 🔥 SPRINT MEGJELENÍTÉS A KÁRTYÁN
+    if (t.sprintId) {
+      const sprintId = Number(t.sprintId);
+      const sprint = sprints.find(s => Number(s.id) === sprintId);
+      
+      if (sprint) {
+        const sprintEl = document.createElement("div");
+        sprintEl.className = "sprint-tag";
+        sprintEl.textContent = `📅 ${sprint.name}`;
+        sprintEl.style.cssText = `
+          display: inline-block !important;
+          margin-top: 4px !important;
+          padding: 2px 10px !important;
+          border-radius: 12px !important;
+          font-size: 0.65rem !important;
+          background: #f0fdf4 !important;
+          border: 1px solid #bbf7d0 !important;
+          color: #15803d !important;
+        `;
+        card.appendChild(sprintEl);
+      }
+    }
 
     // Root hivatkozás
     if (t.parentId) {
@@ -489,7 +492,7 @@ if (t.sprintId) {
       }
     }
 
-    // Actions
+    // --- Actions (Edit, Done, Delete) ---
     const actions = document.createElement("div");
     actions.className = "actions";
     actions.style.cssText = `
@@ -515,22 +518,26 @@ if (t.sprintId) {
     editBtn.addEventListener("click", () => openFormForEdit(t.id));
     actions.appendChild(editBtn);
 
-    const closeBtn = document.createElement("button");
-    closeBtn.className = "btn";
-    closeBtn.type = "button";
-    closeBtn.textContent = "📦";
-    closeBtn.style.cssText = `
-      padding: 2px 6px !important;
-      border-radius: 4px !important;
-      border: 1px solid rgba(0,0,0,0.2) !important;
-      background: #ffffffcc !important;
-      cursor: pointer !important;
-      font-size: 0.7rem !important;
-    `;
-    closeBtn.addEventListener("click", async () => {
-      await closeTask(t.id);
-    });
-    actions.appendChild(closeBtn);
+    // ✅ DONE GOMB (csak akkor jelenik meg, ha nincs már done)
+    if (t.status !== "done") {
+      const doneBtn = document.createElement("button");
+      doneBtn.className = "btn";
+      doneBtn.type = "button";
+      doneBtn.textContent = "✅";
+      doneBtn.style.cssText = `
+        padding: 2px 6px !important;
+        border-radius: 4px !important;
+        border: 1px solid #22c55e !important;
+        background: #ffffffcc !important;
+        cursor: pointer !important;
+        font-size: 0.7rem !important;
+        color: #22c55e !important;
+      `;
+      doneBtn.addEventListener("click", async () => {
+        await markAsDone(t.id);
+      });
+      actions.appendChild(doneBtn);
+    }
 
     const delBtn = document.createElement("button");
     delBtn.className = "btn danger";
@@ -805,22 +812,27 @@ async function onSubmit(ev) {
   }
 }
 
-async function closeTask(id) {
+// --- Mark task as done ---
+async function markAsDone(id) {
+  if (!confirm('Mark this task as done? It will disappear from the board.')) return;
+  
   try {
-    const resp = await fetch(`/api/tasks/${encodeURIComponent(id)}/close`, {
-      method: "POST"
+    const resp = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "done" }),
     });
-
+    
     if (!resp.ok) {
-      console.error(await resp.text());
-      alert("Close failed");
+      console.error("PATCH /api/tasks failed", await resp.text());
+      alert("Error marking task as done.");
       return;
     }
-
+    
     await loadTasksFromServer();
   } catch (err) {
-    console.error(err);
-    alert("Close error");
+    console.error("Done error:", err);
+    alert("Unexpected error while marking task as done.");
   }
 }
 
