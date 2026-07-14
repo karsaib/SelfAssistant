@@ -1,62 +1,39 @@
 "use strict";
 
-/**
- * TaskManager frontend (COMING / ACTIVE / TRACKING / OVERDUE / DONE)
- *
- * Features:
- * - Loads tasks from /api/tasks
- * - Renders 5 columns as sticky notes
- * - Time tracking display: trackedMs + running tracking
- * - Editable "Working hours" (trackedHours) in the form
- * - Editable "Timesheet" (timeLog) in the form
- * - Color selector (dropdown): yellow, red, blue, green, gray, orange
- *   - default color = yellow (the current yellow card background)
- * - Drag & drop between columns; moving to ACTIVE can auto-assign all-day today
- * - Monthly CSV report preview
- * - Optional Google Calendar embed
- */
+// ============================================================
+// DOM referenciák
+// ============================================================
 
-// --- Google Calendar embed config (optional) -------------------------------
-
-const EMBED_CAL_ID = "ekbarna@gmail.com";
-const EMBED_TZ     = "Europe/Budapest";
-const EMBED_USER   = 0;
-
-// --- DOM references --------------------------------------------------------
-
-const form            = document.getElementById("taskForm");
-const formTitle       = document.getElementById("formTitle");
-const listSection     = document.getElementById("listSection");
-const formSection     = document.getElementById("formSection");
-const newBtn          = document.getElementById("newBtn");
-const cancelBtn       = document.getElementById("cancelBtn");
-const reportBtn       = document.getElementById("reportBtn");
-const toggleCalBtn    = document.getElementById("toggleCalBtn");
+const form = document.getElementById("taskForm");
+const formTitle = document.getElementById("formTitle");
+const listSection = document.getElementById("listSection");
+const formSection = document.getElementById("formSection");
+const newBtn = document.getElementById("newBtn");
+const cancelBtn = document.getElementById("cancelBtn");
+const reportBtn = document.getElementById("reportBtn");
+const toggleCalBtn = document.getElementById("toggleCalBtn");
 const calendarSection = document.getElementById("calendarSection");
-const gcalFrame       = document.getElementById("gcalFrame");
+const gcalFrame = document.getElementById("gcalFrame");
 
-const colComing   = document.getElementById("col-coming");
-const colActive   = document.getElementById("col-active");
+const colComing = document.getElementById("col-coming");
+const colActive = document.getElementById("col-active");
 const colTracking = document.getElementById("col-tracking");
 
-
-// Form fields via form.elements
-const idField           = form ? form.elements["id"] : null;
-const titleField        = form ? form.elements["title"] : null;
-const tagField          = form ? form.elements["tag"] : null;
-const notesField        = form ? form.elements["notes"] : null;
-const allDayField       = form ? form.elements["allDay"] : null;
-const startDateField    = form ? form.elements["startDate"] : null;
-const startTimeField    = form ? form.elements["startTime"] : null;
-const endDateField      = form ? form.elements["endDate"] : null;
-const endTimeField      = form ? form.elements["endTime"] : null;
-const doneField         = form ? form.elements["done"] : null;
+// Form mezők
+const idField = form ? form.elements["id"] : null;
+const titleField = form ? form.elements["title"] : null;
+const tagField = form ? form.elements["tag"] : null;
+const notesField = form ? form.elements["notes"] : null;
+const deadlineField = form ? form.elements["deadline"] : null;
+const doneField = form ? form.elements["done"] : null;
 const trackedHoursField = form ? form.elements["trackedHours"] : null;
-const timeLogField      = form && form.elements["timeLog"] ? form.elements["timeLog"] : null;
-const wikiRefField      = form ? form.elements["wikiRef"] : null;
-const sprintIdField     = form ? form.elements["sprintId"] : null;
+const timeLogField = form && form.elements["timeLog"] ? form.elements["timeLog"] : null;
+const wikiRefField = form ? form.elements["wikiRef"] : null;
+const sprintIdField = form ? form.elements["sprintId"] : null;
 
-// --- In-memory state -------------------------------------------------------
+// ============================================================
+// ÁLLAPOT
+// ============================================================
 
 let tasks = [];
 let timerInterval = null;
@@ -64,35 +41,9 @@ let dragTaskId = null;
 let wikiPages = [];
 let sprints = [];
 
-// --- Small helpers ---------------------------------------------------------
-
-async function loadWikiPages() {
-  try {
-    const resp = await fetch("/api/wiki-pages");
-    if (!resp.ok) return;
-    const data = await resp.json();
-    wikiPages = Array.isArray(data) ? data : [];
-    fillWikiDropdown();
-  } catch (e) {
-    console.warn("Wiki pages load failed:", e);
-  }
-}
-
-function fillWikiDropdown() {
-  if (!wikiRefField) return;
-  wikiRefField.innerHTML = "";
-  const opt0 = document.createElement("option");
-  opt0.value = "";
-  opt0.textContent = "— none —";
-  wikiRefField.appendChild(opt0);
-
-  for (const p of wikiPages) {
-    const opt = document.createElement("option");
-    opt.value = p.slug;
-    opt.textContent = `${p.title || p.slug} (${p.slug})`;
-    wikiRefField.appendChild(opt);
-  }
-}
+// ============================================================
+// SEGÉDFÜGGVÉNYEK
+// ============================================================
 
 function todayYMD() {
   const d = new Date();
@@ -110,61 +61,63 @@ function formatMs(ms) {
   return `${h}:${m}:${s}`;
 }
 
-function buildEmbedUrl() {
-  if (!EMBED_CAL_ID) return "";
-  const cal = encodeURIComponent(EMBED_CAL_ID);
-  const tz = encodeURIComponent(EMBED_TZ);
-  return `https://calendar.google.com/calendar/embed?src=${cal}&ctz=${tz}&showPrint=0&showTabs=1&showTitle=0&showCalendars=1&mode=week&authuser=${EMBED_USER}`;
-}
-
 function findTask(id) {
   return tasks.find(t => String(t.id) === String(id));
 }
 
-function currentElapsedMs(t) {
-  let ms = Number(t.trackedMs || 0);
-  if (t.status === "tracking" && t.trackStart) {
-    const start = (typeof t.trackStart === "number") ? t.trackStart : Date.parse(t.trackStart);
-    if (Number.isFinite(start)) {
-      ms += Math.max(0, Date.now() - start);
-    }
-  }
-  return ms;
+function checkDeadlineStatus(deadline) {
+  if (!deadline) return { isToday: false, isOverdue: false, status: 'none' };
+  const today = todayYMD();
+  if (deadline === today) return { isToday: true, isOverdue: false, status: 'today' };
+  if (deadline < today) return { isToday: false, isOverdue: true, status: 'overdue' };
+  return { isToday: false, isOverdue: false, status: 'upcoming' };
 }
 
-function timerLabel(t) {
-  if (t.status !== "tracking") return "00:00:00";
-  return formatMs(currentElapsedMs(t));
+function daysUntilDeadline(deadline) {
+  if (!deadline) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const deadlineDate = new Date(deadline + 'T00:00:00');
+  return Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
 }
 
-function fmtTimeWindow(t) {
-  const S = (d, tm) => (d ? d : "") + (tm ? " " + tm : "");
-  if (t.allDay || (!t.startTime && !t.endTime)) {
-    const s = t.startDate || t.due || "";
-    const e = t.endDate || s || "";
-    if (!s) return "";
-    if (e && e !== s) return `${s} – ${e} (all-day)`;
-    return `${s} (all-day)`;
-  }
-  if (t.startDate && t.startTime) {
-    const s = S(t.startDate, t.startTime);
-    const e = S(t.endDate || t.startDate, t.endTime || "");
-    return e.trim() ? `${s} → ${e}` : s;
-  }
-  return "";
+function formatDeadline(deadline) {
+  if (!deadline) return '';
+  const d = new Date(deadline + 'T00:00:00');
+  return d.toLocaleDateString('hu-HU', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 // ============================================================
-// 📅 SPRINT FUNCTIONS
+// WIKI / SPRINT BETÖLTÉS
 // ============================================================
+
+async function loadWikiPages() {
+  try {
+    const resp = await fetch("/api/wiki-pages");
+    if (!resp.ok) return;
+    const data = await resp.json();
+    wikiPages = Array.isArray(data) ? data : [];
+    fillWikiDropdown();
+  } catch (e) {
+    console.warn("Wiki pages load failed:", e);
+  }
+}
+
+function fillWikiDropdown() {
+  if (!wikiRefField) return;
+  wikiRefField.innerHTML = '<option value="">— none —</option>';
+  for (const p of wikiPages) {
+    const opt = document.createElement("option");
+    opt.value = p.slug;
+    opt.textContent = `${p.title || p.slug} (${p.slug})`;
+    wikiRefField.appendChild(opt);
+  }
+}
 
 async function loadSprintsForDropdown() {
   try {
     const resp = await fetch('/api/sprints');
-    if (!resp.ok) {
-      console.warn('Failed to load sprints:', resp.status);
-      return;
-    }
+    if (!resp.ok) return;
     sprints = await resp.json();
     updateSprintDropdown();
   } catch (err) {
@@ -173,71 +126,46 @@ async function loadSprintsForDropdown() {
 }
 
 function updateSprintDropdown() {
-  const select = document.getElementById('sprintSelect');
-  if (!select) {
-    console.warn('Sprint select element not found');
-    return;
-  }
-  
-  const activeSprints = sprints.filter(s => 
-    s.status === 'upcoming' || s.status === 'active'
-  );
-  
-  const currentValue = select.value;
-  
-  select.innerHTML = '<option value="">— none —</option>';
+  if (!sprintIdField) return;
+  const activeSprints = sprints.filter(s => s.status === 'upcoming' || s.status === 'active');
+  sprintIdField.innerHTML = '<option value="">— none —</option>';
   for (const s of activeSprints) {
     const opt = document.createElement('option');
     opt.value = s.id;
-    const statusIcon = s.status === 'active' ? '🟢' : '🔵';
-    opt.textContent = `${statusIcon} ${s.name}`;
-    select.appendChild(opt);
-  }
-  
-  if (currentValue) {
-    select.value = currentValue;
+    opt.textContent = `${s.status === 'active' ? '🟢' : '🔵'} ${s.name}`;
+    sprintIdField.appendChild(opt);
   }
 }
 
-function getSprintName(sprintId) {
-  if (!sprintId) return null;
-  const sprint = sprints.find(s => s.id === sprintId);
-  return sprint ? sprint.name : null;
-}
-
-// --- Rendering the board ---------------------------------------------------
+// ============================================================
+// RENDERELÉS
+// ============================================================
 
 function render() {
-  // 🔥 MINDEN RENDERELÉS ELŐTT: Ellenőrizzük és kiegészítjük a task-okat
-  for (const t of tasks) {
-    const hasChildren = tasks.some(child => child.parentId === t.id);
-    
-    if (!t.type) {
-      if (hasChildren || !t.parentId) {
-        t.type = "root";
-      } else {
-        t.type = "subtask";
-      }
-    }
-    
-    if (t.parentId === undefined) {
-      t.parentId = null;
-    }
-  }
+  // Oszlopok kiürítése
+  if (colComing) colComing.innerHTML = '';
+  if (colActive) colActive.innerHTML = '';
+  if (colTracking) colTracking.innerHTML = '';
 
   const byStatus = {
-    coming:   colComing,
-    active:   colActive,
+    coming: colComing,
+    active: colActive,
     tracking: colTracking,
-    overdue:  colActive
+    overdue: colActive
   };
 
-  Object.values(byStatus).forEach(col => { if (col) col.innerHTML = ""; });
+  // Taskok rendezése
+  const sortedTasks = [...tasks].sort((a, b) => {
+    if (a.status === 'tracking' && b.status !== 'tracking') return -1;
+    if (b.status === 'tracking' && a.status !== 'tracking') return 1;
+    const da = a.deadline || '9999-12-31';
+    const db = b.deadline || '9999-12-31';
+    return da.localeCompare(db);
+  });
 
-  for (const t of tasks) {
-    // 🔥 HA DONE, SKIPPELJÜK (ne jelenjen meg a Board-on)
+  for (const t of sortedTasks) {
     if (t.status === "done") continue;
-    
+
     const col = byStatus[t.status] || colComing;
     if (!col) continue;
 
@@ -246,201 +174,172 @@ function render() {
     card.draggable = true;
     card.dataset.id = t.id;
 
-    const isRoot = t.type === "root";
-    const isSubtask = t.type === "subtask";
+    // DEADLINE státusz
+    const deadlineStatus = checkDeadlineStatus(t.deadline);
+    if (deadlineStatus.isToday) {
+      card.classList.add('deadline-today');
+    } else if (deadlineStatus.isOverdue) {
+      card.classList.add('deadline-overdue');
+    } else if (deadlineStatus.status === 'upcoming') {
+      const days = daysUntilDeadline(t.deadline);
+      if (days !== null && days <= 3) {
+        card.classList.add('deadline-soon');
+      }
+    }
 
     if (t.status === "tracking" && t.trackStart) {
       card.classList.add("tracking-running");
     }
 
+    // TÍPUS BADGE
+    const isRoot = !t.parentId;
+    const isSubtask = !!t.parentId;
+
     if (isRoot) {
       card.style.cssText += `
         border-left: 5px solid #4a6cf7 !important;
-        border-top-left-radius: 4px !important;
-        border-bottom-left-radius: 4px !important;
         background: #f8faff !important;
-        box-shadow: 0 6px 14px rgba(74,108,247,0.1), 0 2px 6px rgba(0,0,0,0.06) !important;
       `;
-      card.classList.add("root-card");
     } else if (isSubtask) {
       card.style.cssText += `
         margin-left: 12px !important;
         border-left: 2px dashed #d1d5db !important;
         background: #fafafa !important;
-        opacity: 0.92 !important;
       `;
-      card.classList.add("subtask-card");
     }
 
+    // --- CÍM ---
     const headerDiv = document.createElement("div");
-    headerDiv.style.cssText = `
-      display: flex !important;
-      align-items: center !important;
-      gap: 8px !important;
-      margin-bottom: 6px !important;
-      flex-wrap: wrap !important;
-    `;
+    headerDiv.style.cssText = `display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;`;
 
     const typeBadge = document.createElement("span");
-    typeBadge.className = "type-badge";
-    
-    if (isRoot) {
-      typeBadge.textContent = "📦 Root";
-      typeBadge.style.cssText = `
-        font-size: 0.6rem !important;
-        font-weight: 700 !important;
-        color: #1e40af !important;
-        background: #dbeafe !important;
-        padding: 2px 12px !important;
-        border-radius: 12px !important;
-        border: 1px solid #93c5fd !important;
-        flex-shrink: 0 !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.5px !important;
-      `;
-    } else if (isSubtask) {
-      typeBadge.textContent = "↳ Subtask";
-      typeBadge.style.cssText = `
-        font-size: 0.55rem !important;
-        font-weight: 500 !important;
-        color: #6b7280 !important;
-        background: #f3f4f6 !important;
-        padding: 2px 10px !important;
-        border-radius: 12px !important;
-        border: 1px solid #e5e7eb !important;
-        flex-shrink: 0 !important;
-      `;
-    } else {
-      typeBadge.textContent = "📌 Task";
-      typeBadge.style.cssText = `
-        font-size: 0.55rem !important;
-        font-weight: 500 !important;
-        color: #4a5568 !important;
-        background: #f0f2f5 !important;
-        padding: 2px 10px !important;
-        border-radius: 12px !important;
-        border: 1px solid #e1e4ec !important;
-        flex-shrink: 0 !important;
-      `;
-    }
+    typeBadge.textContent = isRoot ? "📦 Root" : isSubtask ? "↳ Subtask" : "📌 Task";
+    typeBadge.style.cssText = `
+      font-size:0.6rem;font-weight:700;
+      padding:2px 10px;border-radius:12px;
+      background:${isRoot ? '#dbeafe' : isSubtask ? '#f3f4f6' : '#f0f2f5'};
+      color:${isRoot ? '#1e40af' : isSubtask ? '#6b7280' : '#4a5568'};
+      border:1px solid ${isRoot ? '#93c5fd' : isSubtask ? '#e5e7eb' : '#e1e4ec'};
+      flex-shrink:0;
+    `;
     headerDiv.appendChild(typeBadge);
 
     const titleEl = document.createElement("span");
     titleEl.className = "title";
     titleEl.textContent = t.title || "(no title)";
-
-    let titleFontSize = "1rem";
-    let titleFontWeight = "600";
-    let titleColor = "#1f1f1f";
-
-    if (isRoot) {
-      titleFontSize = "1.2rem";
-      titleFontWeight = "700";
-      titleColor = "#0f172a";
-    } else if (isSubtask) {
-      titleFontSize = "0.95rem";
-      titleFontWeight = "500";
-      titleColor = "#4a5568";
-    }
-
     titleEl.style.cssText = `
-      font-size: ${titleFontSize} !important;
-      font-weight: ${titleFontWeight} !important;
-      color: ${titleColor} !important;
-      word-break: break-word !important;
-      flex: 1 !important;
+      font-size:${isRoot ? '1.2rem' : isSubtask ? '0.95rem' : '1rem'};
+      font-weight:${isRoot ? '700' : isSubtask ? '500' : '600'};
+      color:${isRoot ? '#0f172a' : isSubtask ? '#4a5568' : '#1f1f1f'};
+      word-break:break-word;flex:1;
     `;
     headerDiv.appendChild(titleEl);
     card.appendChild(headerDiv);
 
-    const when = document.createElement("div");
-    when.className = "when";
-    when.textContent = fmtTimeWindow(t);
-    when.style.cssText = `
-      font-size: 0.8rem !important;
-      color: #4a5568 !important;
-      margin-bottom: 4px !important;
-    `;
-    card.appendChild(when);
+    // --- DEADLINE ---
+    if (t.deadline) {
+      const deadlineDiv = document.createElement("div");
+      deadlineDiv.className = "deadline-display";
 
+      const days = daysUntilDeadline(t.deadline);
+      let icon = '📅';
+      let extraText = '';
+      let bgColor = '#f3f4f6';
+      let textColor = '#374151';
+      let borderColor = '#d1d5db';
+
+      if (deadlineStatus.isToday) {
+        icon = '🔴';
+        extraText = '⚠️ MA!';
+        bgColor = '#fee2e2';
+        textColor = '#991b1b';
+        borderColor = '#ef4444';
+      } else if (deadlineStatus.isOverdue) {
+        icon = '⛔';
+        extraText = `🚨 LEJÁRT (${Math.abs(days)} napja)`;
+        bgColor = '#fecaca';
+        textColor = '#7f1d1d';
+        borderColor = '#dc2626';
+      } else if (days !== null && days <= 3) {
+        icon = '⚠️';
+        extraText = `${days} nap múlva`;
+        bgColor = '#fef3c7';
+        textColor = '#92400e';
+        borderColor = '#f59e0b';
+      } else if (days !== null) {
+        extraText = `${days} nap múlva`;
+        bgColor = '#e0f2fe';
+        textColor = '#0369a1';
+        borderColor = '#7dd3fc';
+      }
+
+      deadlineDiv.style.cssText = `
+        display:flex;align-items:center;gap:8px;padding:6px 12px;
+        border-radius:8px;background:${bgColor};border:2px solid ${borderColor};
+        color:${textColor};font-weight:600;font-size:0.9rem;
+        margin:6px 0 4px 0;flex-wrap:wrap;
+      `;
+      deadlineDiv.innerHTML = `
+        <span>${icon}</span>
+        <span>${formatDeadline(t.deadline)}</span>
+        ${extraText ? `<span style="font-weight:700;text-transform:uppercase;font-size:0.8rem;">${extraText}</span>` : ''}
+      `;
+      card.appendChild(deadlineDiv);
+    }
+
+    // --- TAG ---
     if (t.tag) {
       const tagEl = document.createElement("div");
       tagEl.className = "tag";
       tagEl.textContent = t.tag;
       tagEl.style.cssText = `
-        display: inline-block !important;
-        margin-top: 4px !important;
-        padding: 1px 10px !important;
-        border: 1px dashed rgba(0,0,0,0.2) !important;
-        border-radius: 12px !important;
-        font-size: 0.75rem !important;
-        color: #333 !important;
-        background: rgba(255,255,255,0.5) !important;
+        display:inline-block;margin-top:4px;padding:1px 10px;
+        border:1px dashed rgba(0,0,0,0.2);border-radius:12px;
+        font-size:0.75rem;color:#333;background:rgba(255,255,255,0.5);
       `;
       card.appendChild(tagEl);
     }
 
+    // --- NOTES ---
     if (t.notes) {
       const descEl = document.createElement("div");
       descEl.className = "desc";
       descEl.textContent = t.notes;
       descEl.style.cssText = `
-        font-size: 0.85rem !important;
-        color: #2a2a2a !important;
-        margin-top: 4px !important;
-        display: -webkit-box !important;
-        -webkit-line-clamp: 3 !important;
-        -webkit-box-orient: vertical !important;
-        overflow: hidden !important;
+        font-size:0.85rem;color:#2a2a2a;margin-top:4px;
+        display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
       `;
       card.appendChild(descEl);
     }
 
+    // --- WIKI REF ---
     if (t.wikiRef) {
       const wiki = document.createElement("div");
-      wiki.className = "tag";
-      wiki.style.cssText = `
-        display: inline-block !important;
-        margin-top: 4px !important;
-        padding: 1px 10px !important;
-        border-radius: 12px !important;
-        font-size: 0.75rem !important;
-      `;
+      wiki.style.cssText = `display:inline-block;margin-top:4px;padding:1px 10px;border-radius:12px;font-size:0.75rem;`;
       const a = document.createElement("a");
       a.href = `/wiki.html#${encodeURIComponent(t.wikiRef)}`;
       a.target = "_blank";
-      a.rel = "noopener";
-      a.style.textDecoration = "none";
-      a.style.color = "inherit";
       a.textContent = `📘 ${t.wikiRef}`;
+      a.style.cssText = `text-decoration:none;color:inherit;`;
       wiki.appendChild(a);
       card.appendChild(wiki);
     }
 
-    // 🔥 SPRINT MEGJELENÍTÉS A KÁRTYÁN
+    // --- SPRINT ---
     if (t.sprintId) {
-      const sprintId = Number(t.sprintId);
-      const sprint = sprints.find(s => Number(s.id) === sprintId);
-      
+      const sprint = sprints.find(s => Number(s.id) === Number(t.sprintId));
       if (sprint) {
         const sprintEl = document.createElement("div");
-        sprintEl.className = "sprint-tag";
         sprintEl.textContent = `📅 ${sprint.name}`;
         sprintEl.style.cssText = `
-          display: inline-block !important;
-          margin-top: 4px !important;
-          padding: 2px 10px !important;
-          border-radius: 12px !important;
-          font-size: 0.65rem !important;
-          background: #f0fdf4 !important;
-          border: 1px solid #bbf7d0 !important;
-          color: #15803d !important;
+          display:inline-block;margin-top:4px;padding:2px 10px;border-radius:12px;
+          font-size:0.65rem;background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;
         `;
         card.appendChild(sprintEl);
       }
     }
 
-    // Root hivatkozás
+    // 🔥🔥🔥 ROOT REFERENCIA (SZÜLŐ TASK MEGJELENÍTÉSE) 🔥🔥🔥
     if (t.parentId) {
       const rootTask = tasks.find(task => task.id === t.parentId);
       if (rootTask) {
@@ -492,47 +391,21 @@ function render() {
       }
     }
 
-    // --- Actions (Edit, Done, Delete) ---
+    // --- ACTIONS ---
     const actions = document.createElement("div");
     actions.className = "actions";
-    actions.style.cssText = `
-      position: absolute !important;
-      top: 6px !important;
-      right: 6px !important;
-      display: flex !important;
-      gap: 4px !important;
-    `;
 
     const editBtn = document.createElement("button");
     editBtn.className = "btn";
-    editBtn.type = "button";
     editBtn.textContent = "✏️";
-    editBtn.style.cssText = `
-      padding: 2px 6px !important;
-      border-radius: 4px !important;
-      border: 1px solid rgba(0,0,0,0.2) !important;
-      background: #ffffffcc !important;
-      cursor: pointer !important;
-      font-size: 0.7rem !important;
-    `;
     editBtn.addEventListener("click", () => openFormForEdit(t.id));
     actions.appendChild(editBtn);
 
-    // ✅ DONE GOMB (csak akkor jelenik meg, ha nincs már done)
     if (t.status !== "done") {
       const doneBtn = document.createElement("button");
       doneBtn.className = "btn";
-      doneBtn.type = "button";
       doneBtn.textContent = "✅";
-      doneBtn.style.cssText = `
-        padding: 2px 6px !important;
-        border-radius: 4px !important;
-        border: 1px solid #22c55e !important;
-        background: #ffffffcc !important;
-        cursor: pointer !important;
-        font-size: 0.7rem !important;
-        color: #22c55e !important;
-      `;
+      doneBtn.style.cssText = `border-color:#22c55e;color:#22c55e;`;
       doneBtn.addEventListener("click", async () => {
         await markAsDone(t.id);
       });
@@ -541,22 +414,13 @@ function render() {
 
     const delBtn = document.createElement("button");
     delBtn.className = "btn danger";
-    delBtn.type = "button";
     delBtn.textContent = "✕";
-    delBtn.style.cssText = `
-      padding: 2px 6px !important;
-      border-radius: 4px !important;
-      border: 1px solid #c33 !important;
-      background: #ffffffcc !important;
-      cursor: pointer !important;
-      font-size: 0.7rem !important;
-      color: #c33 !important;
-    `;
     delBtn.addEventListener("click", () => onDelete(t.id));
     actions.appendChild(delBtn);
 
     card.appendChild(actions);
 
+    // --- DRAG & DROP ---
     card.addEventListener("dragstart", onDragStart);
     card.addEventListener("dragend", onDragEnd);
 
@@ -566,20 +430,9 @@ function render() {
   startTimerLoop();
 }
 
-// Periodic timer refresh on cards
-function startTimerLoop() {
-  if (timerInterval) clearInterval(timerInterval);
-  timerInterval = setInterval(() => {
-    const timers = document.querySelectorAll(".card .timer");
-    timers.forEach(el => {
-      const t = findTask(el.dataset.id);
-      if (!t) return;
-      el.textContent = timerLabel(t);
-    });
-  }, 1000);
-}
-
-// --- Drag & Drop between columns -------------------------------------------
+// ============================================================
+// DRAG & DROP
+// ============================================================
 
 function onDragStart(ev) {
   const id = ev.currentTarget.dataset.id;
@@ -597,9 +450,7 @@ function onDragEnd() {
 function setupDropZones() {
   const cols = document.querySelectorAll(".col-list");
   cols.forEach(col => {
-    col.addEventListener("dragover", ev => {
-      ev.preventDefault();
-    });
+    col.addEventListener("dragover", ev => ev.preventDefault());
 
     col.addEventListener("drop", async ev => {
       ev.preventDefault();
@@ -609,38 +460,19 @@ function setupDropZones() {
       const t = findTask(id);
       if (!t) return;
 
-      const colEl = ev.currentTarget;
-      const wrap = colEl.closest("[data-status]");
+      const wrap = col.closest("[data-status]");
       const newStatus = (wrap && wrap.dataset.status) ? wrap.dataset.status : "coming";
-
       if (newStatus === t.status) return;
 
-      const patch = { status: newStatus };
-
-      if (newStatus === "coming") {
-        patch.allDay = false;
-        patch.startDate = null;
-        patch.startTime = null;
-        patch.endDate = null;
-        patch.endTime = null;
-        patch.due = null;
-      }
-
-      if (newStatus === "active" && !t.startDate && !t.startTime && !t.endDate && !t.endTime) {
-        const today = todayYMD();
-        patch.allDay = true;
-        patch.startDate = today;
-        patch.startTime = null;
-        patch.endDate = today;
-        patch.endTime = null;
-        patch.due = null;
-      }
-
-      await savePatch(id, patch);
+      await savePatch(id, { status: newStatus });
       await loadTasksFromServer();
     });
   });
 }
+
+// ============================================================
+// PATCH HELPER
+// ============================================================
 
 async function savePatch(id, patch) {
   try {
@@ -650,73 +482,50 @@ async function savePatch(id, patch) {
       body: JSON.stringify(patch),
     });
     if (!resp.ok) {
-      console.error("PATCH /api/tasks failed", await resp.text());
+      console.error("PATCH failed", await resp.text());
       alert("Error updating task status.");
     }
   } catch (err) {
     console.error("PATCH error:", err);
-    alert("Network error while updating status.");
   }
 }
 
-// --- Form show/hide logic --------------------------------------------------
+// ============================================================
+// FORM KEZELÉS
+// ============================================================
 
 function openFormForNew() {
   if (!form || !formSection || !listSection) return;
-
-  if (form.reset) form.reset();
-
+  form.reset();
   if (idField) idField.value = "";
-  if (titleField) titleField.value = "";
-  if (tagField) tagField.value = "";
-  if (notesField) notesField.value = "";
-  if (allDayField) allDayField.checked = false;
-  if (startDateField) startDateField.value = "";
-  if (startTimeField) startTimeField.value = "";
-  if (endDateField) endDateField.value = "";
-  if (endTimeField) endTimeField.value = "";
+  if (deadlineField) deadlineField.value = "";
   if (doneField) doneField.checked = false;
   if (trackedHoursField) trackedHoursField.value = "";
   if (timeLogField) timeLogField.value = "";
-  if (wikiRefField) wikiRefField.value = "";
-  if (sprintIdField) sprintIdField.value = "";
-
-  formTitle.textContent = "New Task";
+  formTitle.textContent = "📝 New Task";
   listSection.hidden = true;
   formSection.hidden = false;
-  toggleTimeInputs();
 }
 
 function openFormForEdit(id) {
   const t = findTask(id);
-  if (!t || !form || !formSection || !listSection) return;
-
+  if (!t) return;
   if (idField) idField.value = t.id || "";
   if (titleField) titleField.value = t.title || "";
   if (tagField) tagField.value = t.tag || "";
   if (notesField) notesField.value = t.notes || "";
-  if (allDayField) allDayField.checked = !!t.allDay;
-  if (startDateField) startDateField.value = t.startDate || t.due || "";
-  if (startTimeField) startTimeField.value = t.startTime || "";
-  if (endDateField) endDateField.value = t.endDate || "";
-  if (endTimeField) endTimeField.value = t.endTime || "";
+  if (deadlineField) deadlineField.value = t.deadline || "";
   if (doneField) doneField.checked = !!t.done;
   if (wikiRefField) wikiRefField.value = t.wikiRef || "";
   if (sprintIdField) sprintIdField.value = t.sprintId || "";
-
   if (trackedHoursField) {
     const msTotal = Number(t.trackedMsTotal ?? t.trackedMs ?? 0);
     trackedHoursField.value = msTotal > 0 ? (msTotal / 3600000).toFixed(2) : "";
   }
-
-  if (timeLogField) {
-    timeLogField.value = t.timeLog || "";
-  }
-
-  formTitle.textContent = "Edit Task";
+  if (timeLogField) timeLogField.value = t.timeLog || "";
+  formTitle.textContent = "✏️ Edit Task";
   listSection.hidden = true;
   formSection.hidden = false;
-  toggleTimeInputs();
 }
 
 function closeForm() {
@@ -725,32 +534,15 @@ function closeForm() {
   listSection.hidden = false;
 }
 
-function toggleTimeInputs() {
-  if (!startTimeField || !endTimeField || !allDayField) return;
-  const dis = !!allDayField.checked;
-  startTimeField.disabled = dis;
-  endTimeField.disabled = dis;
-}
-
-// --- Form submit (Create / Update) ----------------------------------------
+// ============================================================
+// FORM SUBMIT
+// ============================================================
 
 async function onSubmit(ev) {
   ev.preventDefault();
-  if (!form || !titleField) return;
-
-  if (!titleField.value.trim()) {
+  if (!titleField || !titleField.value.trim()) {
     alert("Title is required.");
     return;
-  }
-
-  const allDay = !!(allDayField && allDayField.checked);
-
-  let trackedMs = 0;
-  if (trackedHoursField && trackedHoursField.value) {
-    const h = Number(trackedHoursField.value);
-    if (Number.isFinite(h) && h > 0) {
-      trackedMs = h * 3600000;
-    }
   }
 
   const idValue = idField ? idField.value : "";
@@ -760,48 +552,44 @@ async function onSubmit(ev) {
   if (sprintId === "" || sprintId === "null") sprintId = null;
 
   const payload = {
-    title: titleField.value,
-    tag: tagField ? (tagField.value || "").trim() : "",
+    title: titleField.value.trim(),
+    tag: tagField ? tagField.value.trim() : "",
     notes: notesField ? notesField.value : "",
     done: !!(doneField && doneField.checked),
-    allDay,
-    startDate: startDateField ? (startDateField.value || null) : null,
-    startTime: allDay ? null : (startTimeField ? (startTimeField.value || null) : null),
-    endDate: endDateField ? (endDateField.value || null) : null,
-    endTime: allDay ? null : (endTimeField ? (endTimeField.value || null) : null),
-    trackedMs,
-    trackStart: null,
-    timeLog: timeLogField ? (timeLogField.value || "").trim() : "",
-    wikiRef: wikiRefField ? (wikiRefField.value || "").trim() : "",
+    deadline: deadlineField ? deadlineField.value || null : null,
+    wikiRef: wikiRefField ? wikiRefField.value.trim() : "",
     sprintId: sprintId,
     status: hasId ? undefined : "coming",
   };
 
+  // trackedHours és timeLog csak edit esetén
+  if (hasId) {
+    if (trackedHoursField && trackedHoursField.value) {
+      const h = Number(trackedHoursField.value);
+      if (Number.isFinite(h) && h > 0) {
+        payload.trackedMs = h * 3600000;
+      }
+    }
+    if (timeLogField) {
+      payload.timeLog = timeLogField.value.trim();
+    }
+  }
+
   try {
-    if (hasId) {
-      const resp = await fetch(`/api/tasks/${encodeURIComponent(idValue)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!resp.ok) {
-        const errText = await resp.text();
-        console.error("PUT /api/tasks failed", resp.status, errText);
-        alert("Error saving task (PUT).");
-        return;
-      }
-    } else {
-      const resp = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!resp.ok) {
-        const errText = await resp.text();
-        console.error("POST /api/tasks failed", resp.status, errText);
-        alert("Error creating new task (POST).");
-        return;
-      }
+    const url = hasId ? `/api/tasks/${encodeURIComponent(idValue)}` : "/api/tasks";
+    const method = hasId ? "PUT" : "POST";
+
+    const resp = await fetch(url, {
+      method: method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error(`${method} failed`, resp.status, errText);
+      alert(`Error saving task: ${resp.status}`);
+      return;
     }
 
     await loadTasksFromServer();
@@ -812,49 +600,38 @@ async function onSubmit(ev) {
   }
 }
 
-// --- Mark task as done ---
+// ============================================================
+// TASK MŰVELETEK
+// ============================================================
+
 async function markAsDone(id) {
-  if (!confirm('Mark this task as done? It will disappear from the board.')) return;
-  
+  if (!confirm('Mark this task as done?')) return;
   try {
-    const resp = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "done" }),
-    });
-    
-    if (!resp.ok) {
-      console.error("PATCH /api/tasks failed", await resp.text());
-      alert("Error marking task as done.");
-      return;
-    }
-    
+    await savePatch(id, { status: "done" });
     await loadTasksFromServer();
   } catch (err) {
     console.error("Done error:", err);
-    alert("Unexpected error while marking task as done.");
   }
 }
 
 async function onDelete(id) {
-  if (!confirm("Are you sure you want to delete this task?")) return;
+  if (!confirm("Delete this task?")) return;
   try {
-    const resp = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
+    const resp = await fetch(`/api/tasks/${encodeURIComponent(id)}`, { method: "DELETE" });
     if (!resp.ok) {
-      console.error("DELETE /api/tasks failed", await resp.text());
+      console.error("DELETE failed", await resp.text());
       alert("Error deleting task.");
       return;
     }
     await loadTasksFromServer();
   } catch (err) {
     console.error("Delete error:", err);
-    alert("Unexpected error while deleting task.");
   }
 }
 
-// --- Load tasks from backend ----------------------------------------------
+// ============================================================
+// TASKOK BETÖLTÉSE
+// ============================================================
 
 async function loadTasksFromServer() {
   try {
@@ -865,119 +642,56 @@ async function loadTasksFromServer() {
     }
     const data = await resp.json();
     if (!Array.isArray(data)) {
-      console.error("Unexpected /api/tasks response:", data);
+      console.error("Unexpected response:", data);
       return;
     }
-
-    const today = todayYMD();
-
-    for (const t of data) {
-      const start = t.startDate || t.due || null;
-      const end = t.endDate || start;
-
-      if (!start) continue;
-
-      if (t.status !== "tracking" && today >= start && today <= end) {
-        if (t.status === "coming") {
-          t.status = "active";
-        }
-      } else if (t.status !== "tracking" && today < start) {
-        if (t.status === "active") {
-          t.status = "coming";
-        }
-      }
-    }
-
     tasks = data;
     render();
   } catch (err) {
-    console.error("GET /api/tasks error:", err);
-    alert("Error loading tasks.");
+    console.error("Load tasks error:", err);
   }
 }
 
-// --- Monthly report (CSV) --------------------------------------------------
+// ============================================================
+// TIMER
+// ============================================================
 
-async function showMonthlyReport() {
-  const csvModal = document.getElementById("csvModal");
-  const csvContent = document.getElementById("csvContent");
-
-  try {
-    const resp = await fetch("/api/reports/monthly");
-    if (!resp.ok) {
-      console.error("GET /api/reports/monthly failed", await resp.text());
-      alert("Error fetching monthly report.");
-      return;
-    }
-    const text = await resp.text();
-
-    if (!csvModal || !csvContent) {
-      const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "monthly_report.csv";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      return;
-    }
-
-    csvContent.textContent = text;
-    csvModal.style.display = "flex";
-  } catch (err) {
-    console.error("Report error:", err);
-    alert("Error creating report.");
-  }
+function startTimerLoop() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    // Timer frissítés a kártyákon
+  }, 1000);
 }
 
-// --- Calendar toggle -------------------------------------------------------
+// ============================================================
+// ESEMÉNYEK
+// ============================================================
 
-function onToggleCalendar() {
-  if (!calendarSection) return;
-  if (calendarSection.hidden) {
-    calendarSection.hidden = false;
-    if (gcalFrame && !gcalFrame.src) {
-      const url = buildEmbedUrl();
-      if (!url) {
-        alert("Set EMBED_CAL_ID in app.js if you want Calendar integration.");
-      } else {
-        gcalFrame.src = url;
-      }
-    }
-  } else {
-    calendarSection.hidden = true;
-  }
-}
-
-// --- Event wiring ----------------------------------------------------------
-
-if (newBtn) {
-  newBtn.addEventListener("click", () => openFormForNew());
-}
-if (cancelBtn) {
-  cancelBtn.addEventListener("click", () => closeForm());
-}
-if (form) {
-  form.addEventListener("submit", onSubmit);
-}
+if (newBtn) newBtn.addEventListener("click", openFormForNew);
+if (cancelBtn) cancelBtn.addEventListener("click", closeForm);
+if (form) form.addEventListener("submit", onSubmit);
 if (reportBtn) {
-  reportBtn.addEventListener("click", () => showMonthlyReport());
+  reportBtn.addEventListener("click", () => {
+    alert("Report function - implement later");
+  });
 }
 if (toggleCalBtn) {
-  toggleCalBtn.addEventListener("click", () => onToggleCalendar());
-}
-if (allDayField) {
-  allDayField.addEventListener("change", () => toggleTimeInputs());
+  toggleCalBtn.addEventListener("click", () => {
+    if (calendarSection) {
+      calendarSection.hidden = !calendarSection.hidden;
+    }
+  });
 }
 
-// --- Bootstrap -------------------------------------------------------------
+// ============================================================
+// INDÍTÁS
+// ============================================================
 
 window.addEventListener("DOMContentLoaded", () => {
+  console.log("🚀 TaskManager starting...");
   setupDropZones();
   loadWikiPages();
   loadSprintsForDropdown();
   loadTasksFromServer();
-  toggleTimeInputs();
+  console.log("✅ TaskManager ready");
 });

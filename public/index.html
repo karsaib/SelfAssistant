@@ -2,7 +2,7 @@
 <html lang="hu">
 <head>
   <meta charset="utf-8" />
-  <title>TaskManager — Kanban (COMING / ACTIVE / TRACKING)</title>
+  <title>TaskManager — Kanban (DEADLINE alapú)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&display=swap" rel="stylesheet">
 
@@ -12,32 +12,64 @@
     body{ margin:0; width:100%; padding:24px 24px; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:var(--ink); background:var(--bg); }
     header{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
     h1{ font-size:22px; margin:0; }
-    .btn{ padding:.45rem .8rem; border:1px solid #999; background:#fff; border-radius:.5rem; cursor:pointer; }
+    .btn{ padding:.45rem .8rem; border:1px solid #999; background:#fff; border-radius:.5rem; cursor:pointer; text-decoration:none; color:#000; display:inline-block; }
     .btn.danger{ border-color:#c33; }
-    .inline{ display:inline-flex; gap:8px; align-items:center; }
+    .inline{ display:inline-flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .muted{ color:var(--muted); font-size:.9rem; }
 
+    /* BOARD */
+    .board{
+      display: grid;
+      grid-template-columns: 35% 50% 15%;
+      gap: 14px;
+      align-items: start;
+      width: 100%;
+    }
 
     .col{
-      background: linear-gradient(180deg,#fff, #f7f9ff);
+      background: #f7f9ff;
       border:1px solid var(--border); border-radius:12px; overflow:hidden;
       display:flex; flex-direction:column; min-height:420px;
+      padding:10px;
+      max-height: 80vh;
+      overflow-y: auto;
     }
-    .col-header{
-      padding:10px 12px; font-weight:700; letter-spacing:.5px;
-      background:#eef2ff; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:1;
+
+    .col-title{
+      font-weight:700;
+      text-align:center;
+      margin-bottom:10px;
+      padding:10px;
+      border-radius:10px;
+      background:rgba(255,255,255,0.7);
+      position:sticky;
+      top:0;
+      z-index:4;
     }
-    .col[data-status="coming"]  .col-header{ color:#0b7285; }
-    .col[data-status="active"]  .col-header{ color:#b35c00; }
-    .col[data-status="tracking"] .col-header{ color:#8b00b3; }
-   
+
+    .col[data-status="active"] .col-title{
+      background:rgba(0,0,0,0.35);
+      color:#fff;
+    }
 
     .col-list{
       padding:12px; display:flex; flex-direction:column; gap:12px; flex:1;
       min-height: 360px;
     }
-    .col-list.drag-over{ outline:2px dashed rgba(0,0,0,.2); outline-offset:-6px; }
 
+    .col[data-status="active"] > .col-list{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .col[data-status="coming"] > .col-list{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    /* CARD */
     .card{
       position:relative; padding:14px 12px 12px;
       border:1.5px solid rgba(0,0,0,.1); border-radius:10px;
@@ -45,233 +77,169 @@
       transform: rotate(var(--rot,0deg));
       transition: box-shadow .12s ease;
       font-family:"Architects Daughter",cursive;
+      cursor: grab;
+      padding-top: 34px;
     }
-    .card.dragging{ opacity:.85; box-shadow: 0 12px 26px rgba(0,0,0,.16), 0 6px 12px rgba(0,0,0,.12); }
-    .card::before{ content:"📌"; position:absolute; left:14px; top:-10px; font-size:20px; transform:rotate(-12deg); filter: drop-shadow(0 2px 1px rgba(0,0,0,.25)); }
-    .note-title{ font-size:18px; font-weight:700; margin:0 28px 6px 0; line-height:1.2; color:#000; }
-    .meta{ display:grid; grid-template-columns:auto 1fr; gap:.35rem .45rem; align-items:baseline; }
-    .when{ font-size:.95rem; color:#444; }
-    .desc{ font-size:1rem; color:#2a2a2a; display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical; overflow:hidden; }
-    .tag{ display:inline-block; margin-top:6px; padding:.1rem .5rem; border:1px dashed rgba(0,0,0,.22); border-radius:999px; font-size:.9rem; color:#222; background:rgba(255,255,255,.5) }
-    .actions{ position:absolute; top:6px; right:6px; display:flex; gap:6px; }
-    .actions .btn{ padding:.25rem .5rem; border-radius:.35rem; border:1px solid rgba(0,0,0,.25); background:#ffffffce }
-    .timer{ font-weight:700; }
 
-    #calendarSection{ margin:12px 0 16px; }
-    iframe{ background:#fff; border-radius:10px; }
+    .card .title{
+      font-size:1rem;
+      font-weight:600;
+      color:#1f1f1f;
+      word-break:break-word;
+      flex:1;
+    }
+
+    .card .actions{
+      position:absolute; top:6px; right:6px; display:flex; gap:4px;
+    }
+
+    .card .actions .btn{
+      padding:2px 6px;
+      border-radius:4px;
+      border:1px solid rgba(0,0,0,.2);
+      background:#ffffffcc;
+      cursor:pointer;
+      font-size:0.7rem;
+    }
+
+    .card .actions .btn.danger{
+      border-color:#c33;
+      color:#c33;
+    }
+
+    /* DEADLINE STÍLUSOK */
+    .card.deadline-today {
+      border: 3px solid #ef4444 !important;
+      box-shadow: 0 0 0 4px #fecaca, 0 8px 24px rgba(239, 68, 68, 0.3) !important;
+      animation: pulse-deadline 1.5s ease-in-out infinite !important;
+      background: #fef2f2 !important;
+    }
+
+    .card.deadline-overdue {
+      border: 3px solid #dc2626 !important;
+      box-shadow: 0 0 0 4px #fca5a5, 0 8px 24px rgba(220, 38, 38, 0.3) !important;
+      background: #fee2e2 !important;
+      opacity: 0.85 !important;
+    }
+
+    .card.deadline-soon {
+      border: 2px solid #f59e0b !important;
+      box-shadow: 0 0 0 3px #fde68a, 0 8px 20px rgba(245, 158, 11, 0.2) !important;
+      background: #fffbeb !important;
+    }
+
+    @keyframes pulse-deadline {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); box-shadow: 0 0 0 8px #fca5a5, 0 8px 30px rgba(239, 68, 68, 0.4); }
+    }
+
+    .deadline-display {
+      display: flex !important;
+      align-items: center !important;
+      gap: 8px !important;
+      padding: 6px 12px !important;
+      border-radius: 8px !important;
+      margin: 6px 0 4px 0 !important;
+      flex-wrap: wrap !important;
+      font-weight: 600 !important;
+    }
+
+    /* FORM */
     #formSection{ margin-top:10px; }
     form{ display:grid; gap:.6rem; }
     label{ display:grid; gap:.25rem; }
     .row{ display:grid; gap:.6rem; grid-template-columns:repeat(4,minmax(0,1fr)); }
     input,textarea{ padding:.55rem .7rem; border:1px solid var(--border); border-radius:.5rem; background:#fff; }
     textarea{ resize:vertical; min-height:84px; }
- @media (max-width:1400px){
-  .board{
-    grid-template-columns: 35% 50% 15%;
-  }
-}
 
-@media (max-width:900px){
-  .board{
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-@media (max-width:600px){
-  .board{
-    grid-template-columns: 1fr;
-  }
-
-  .row{
-    grid-template-columns:repeat(2,minmax(0,1fr));
-  }
-}
+    @media (max-width:900px){
+      .board{ grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width:600px){
+      .board{ grid-template-columns: 1fr; }
+      .row{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
     @media (max-width:520px){ .row{ grid-template-columns:1fr; } }
-	
-/* --- Type badge a kártyákon --- */
-.type-badge {
-  display: inline-block !important;
-  font-size: 0.6rem !important;
-  font-weight: 600 !important;
-  padding: 2px 10px !important;
-  border-radius: 12px !important;
-  margin-bottom: 6px !important;
-  letter-spacing: 0.3px !important;
-  text-transform: uppercase !important;
-}
 
-/* Root task badge - kiemeltebb */
-.type-badge.root {
-  color: #1e40af !important;
-  background: #dbeafe !important;
-  border: 1px solid #93c5fd !important;
-}
-
-/* Subtask badge - visszafogottabb */
-.type-badge.subtask {
-  color: #6b7280 !important;
-  background: #f3f4f6 !important;
-  border: 1px solid #d1d5db !important;
-}
-
-/* Root kártyák szegélye - hogy kiemelkedjen */
-.card.root-card {
-  border-left: 4px solid #4a6cf7 !important;
-  border-top-left-radius: 4px !important;
-  border-bottom-left-radius: 4px !important;
-}
-
-/* Subtask kártyák - behúzva */
-.card.subtask-card {
-  margin-left: 12px !important;
-  border-left: 2px dashed #d1d5db !important;
-}
-/* --- Kártya cím --- */
-.card .title {
-  font-size: 1rem !important;
-  font-weight: 600 !important;
-  color: #1f1f1f !important;
-  display: inline !important;
-  word-break: break-word !important;
-}
-
-/* --- Type badge --- */
-.card .type-badge {
-  display: inline-block !important;
-  flex-shrink: 0 !important;
-}
-
-/* --- Header sor --- */
-.card .card-header {
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  margin-bottom: 6px !important;
-  flex-wrap: wrap !important;
-}
-
+    /* CSV Modal */
+    #csvModal{ display:none; position:fixed; inset:0; background:#0008; z-index:999; align-items:center; justify-content:center; }
+    #csvModal .modal-content{ background:#fff; padding:20px; border-radius:8px; max-width:800px; width:90%; max-height:80%; overflow:auto; }
   </style>
-  
-    <link rel="stylesheet" href="/style-board.css">
 </head>
 <body>
   <header>
-    <h1>TaskManager</h1>
-
+    <h1>📋 TaskManager</h1>
     <div class="inline">
-      <a class="btn" href="/auth/google">Google auth</a>
-      <button id="toggleCalBtn" class="btn">Calendar</button>
-      <button id="newBtn" class="btn">+ New</button>
-      <button id="reportBtn" class="btn">Monthly report (CSV)</button>
-      <a href="/project.html" class="btn">📊 Project View</a>
-      <a href="/timeline.html" class="btn">📈 Timeline</a>
-      <a href="/sprint-dashboard.html" class="btn">📊 Sprint Dashboard</a>
-
-
-      <!-- Dokumentumtár ikon + gomb stílusban -->
-      <a class="btn" href="doc.html" title="Dokumentumtár">
-        📁 Document store
-      </a>
-      
-      <a class="btn" href="wiki.html" title="Tudásbázis / Wiki">
-  🧠 Wiki
-</a>
+      <button id="newBtn" class="btn">➕ New</button>
+      <button id="reportBtn" class="btn">📊 Report</button>
+      <button id="toggleCalBtn" class="btn">📅 Calendar</button>
+      <a href="/project.html" class="btn">📊 Project</a>
+      <a href="/wiki.html" class="btn">🧠 Wiki</a>
+      <a href="/doc.html" class="btn">📁 Docs</a>
     </div>
-
-  </header>
-
-
   </header>
 
   <section id="calendarSection" hidden>
-    <iframe id="gcalFrame" width="100%" height="540" frameborder="0" scrolling="no"></iframe>
+    <iframe id="gcalFrame" width="100%" height="400" frameborder="0" scrolling="no"></iframe>
   </section>
 
   <section id="listSection">
-  <div class="board" id="board">
-
-   
-
-
-
-    <div class="col" data-status="coming">
-      <div class="col-title">BACKLOG</div>
-      <div class="col-list" id="col-coming"></div>
+    <div class="board" id="board">
+      <div class="col" data-status="coming">
+        <div class="col-title">📥 BACKLOG</div>
+        <div class="col-list" id="col-coming"></div>
+      </div>
+      <div class="col" data-status="active">
+        <div class="col-title">⚡ ACTIVE</div>
+        <div class="col-list" id="col-active"></div>
+      </div>
+      <div class="col" data-status="tracking">
+        <div class="col-title">⏱️ TRACKING</div>
+        <div class="col-list" id="col-tracking"></div>
+      </div>
     </div>
- <div class="col" data-status="active">
-      <div class="col-title">ACTIVE</div>
-      <div class="col-list" id="col-active"></div>
-    </div>
-    <div class="col" data-status="tracking">
-      <div class="col-title">TRACKING</div>
-      <div class="col-list" id="col-tracking"></div>
-    </div>
-
- 
-
-  
-
-  </div>
-</section>
-
+  </section>
 
   <section id="formSection" hidden>
-    <h2 id="formTitle" style="margin:.25rem 0 0">New Task</h2>
+    <h2 id="formTitle">New Task</h2>
     <form id="taskForm">
       <input type="hidden" name="id" />
-      <label>Title <input required name="title" placeholder="Pl. Üzleti prezentáció" /></label>
-      <label>Tag   <input name="tag" placeholder="pl. Work / Personal / Urgent" /></label>
-	  <label>Wiki reference
-  <select name="wikiRef" id="wikiRefSelect">
-    <option value="">— none —</option>
-  </select>
-  <span class="muted">Task connected to wiki page (slug).</span>
-  <label>Sprint
-  <select name="sprintId" id="sprintSelect">
-    <option value="">— none —</option>
-  </select>
-  <span class="muted">Assign task to a sprint.</span>
-</label>
-</label>
-      <div class="inline" style="gap:10px">
-        <label class="inline" style="gap:6px"><input type="checkbox" name="allDay" id="allDayChk" /> All-day</label>
-        <span class="muted">Ha nincs idő megadva, all-day esemény lesz.</span>
+      <label>Title <input required name="title" placeholder="Task title" /></label>
+      <label>Tag <input name="tag" placeholder="Work / Personal / Urgent" /></label>
+      <label>Wiki reference
+        <select name="wikiRef" id="wikiRefSelect">
+          <option value="">— none —</option>
+        </select>
+      </label>
+      <label>Sprint
+        <select name="sprintId" id="sprintSelect">
+          <option value="">— none —</option>
+        </select>
+      </label>
+      <label>Deadline (határidő)
+        <input type="date" name="deadline" />
+        <span class="muted">Ha a határidő ma van vagy lejárt → ACTIVE</span>
+      </label>
+      <label>Notes <textarea name="notes" rows="4" placeholder="Jegyzet..."></textarea></label>
+      <label>Working hours <input type="number" name="trackedHours" step="0.01" min="0" placeholder="pl. 1.5" /></label>
+      <label>Timesheet <textarea name="timeLog" rows="3" placeholder="Időnapló..."></textarea></label>
+      <label class="inline"><input type="checkbox" name="done" /> Done</label>
+      <div class="inline">
+        <button class="btn" type="submit">💾 Save</button>
+        <button class="btn" type="button" id="cancelBtn">❌ Cancel</button>
       </div>
-      <div class="row">
-        <label>Start date <input type="date" name="startDate" /></label>
-        <label>Start time <input type="time" name="startTime" step="60" /></label>
-        <label>End date   <input type="date" name="endDate" /></label>
-        <label>End time   <input type="time" name="endTime" step="60" /></label>
-      </div>
-<label>Notes <textarea name="notes" rows="4" placeholder="Jegyzet a cetlire..."></textarea></label>
-
-<label>Working hours
-  <input type="number" name="trackedHours" step="0.01" min="0" placeholder="pl. 1.5" />
-  <span class="muted">(1 óra = 3600000 ms)</span>
-</label>
-
-<label>Timesheet
-  <textarea name="timeLog" rows="3" placeholder="2025-11-14:01:30:00, 2025-11-14:00:45:00"></textarea>
-  <span class="muted">Format (HH:MM:SS), comma separated.</span>
-</label>
-
-
-
-<label class="inline" style="gap:6px"><input type="checkbox" name="done" /> Ready</label>
-
-      <div class="inline"><button class="btn" type="submit">Save</button><button class="btn" type="button" id="cancelBtn">Cancel</button></div>
     </form>
   </section>
 
-
-<div id="csvModal" style="display:none; position:fixed; inset:0; background:#0008; z-index:999; align-items:center; justify-content:center;">
-  <div style="background:#fff; padding:20px; border-radius:8px; max-width:800px; width:90%; max-height:80%; overflow:auto;">
-    <h3>Riport (CSV előnézet)</h3>
-    <pre id="csvContent" style="white-space:pre-wrap; font-family:monospace;"></pre>
-    <button onclick="document.getElementById('csvModal').style.display='none'" class="btn">Bezár</button>
+  <div id="csvModal">
+    <div class="modal-content">
+      <h3>📊 Monthly Report (CSV)</h3>
+      <pre id="csvContent" style="white-space:pre-wrap;font-family:monospace;max-height:400px;overflow:auto;"></pre>
+      <button onclick="document.getElementById('csvModal').style.display='none'" class="btn">Close</button>
+    </div>
   </div>
-</div>
 
+  <!-- 🔥 Fontos: a JS fájlok betöltése -->
   <script src="/app.js"></script>
 </body>
 </html>
